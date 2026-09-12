@@ -127,14 +127,16 @@ def backfill(conn: sqlite3.Connection, progress=print) -> dict:
             try:
                 s = fetch_range(client, lk["lat"], lk["lon"], start, end)
                 rows = _rows_from_series(lk["lake_id"], lk["lat"], lk["lon"], s)
+                # Write and commit immediately - the fetch above must never sit
+                # inside an open write transaction.
                 _store(conn, rows)
+                conn.commit()
                 stats["lakes"] += 1
                 stats["rows"] += len(rows)
             except Exception as exc:
                 stats["failed"] += 1
                 progress(f"  ! {lk['name']}: {type(exc).__name__}: {exc}")
             if i % 10 == 0:
-                conn.commit()
                 progress(f"  weather {i}/{len(lakes)} lakes, {stats['rows']} rows")
             time.sleep(0.2)
     conn.commit()

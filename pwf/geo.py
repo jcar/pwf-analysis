@@ -17,8 +17,11 @@ from .config import DATA, USER_AGENT
 
 GEOCODE = "https://geocoding-api.open-meteo.com/v1/search"
 OVERRIDES = DATA / "lake_coords.csv"
-# Club properties are all in Texas and Oklahoma.
+# Club properties are all in Texas and Oklahoma. Anything else is a wrong hit -
+# there is a Lancaster in California as well as in Texas, and accepting it would
+# silently attach the wrong weather to every trip on that lake.
 _STATES = {"Texas": 0, "Oklahoma": 1}
+_STATE_CODES = {"TX": "Texas", "OK": "Oklahoma"}
 
 
 def _load_overrides() -> dict[str, tuple[float, float]]:
@@ -34,59 +37,88 @@ def _load_overrides() -> dict[str, tuple[float, float]]:
     return out
 
 
-def geocode_town(client: httpx.Client, town: str) -> tuple[float, float] | None:
+def geocode_town(client: httpx.Client, town: str,
+                 state: str | None = None) -> tuple[float, float] | None:
+    """Look up a town, accepting only Texas and Oklahoma matches.
+
+    Common town names repeat across states, so a match outside the club's two
+    states is rejected outright rather than used as a fallback.
+    """
     try:
-        r = client.get(GEOCODE, params={"name": town, "count": 10,
+        r = client.get(GEOCODE, params={"name": town, "count": 100,
                                         "language": "en", "format": "json"})
         results = r.json().get("results") or []
     except Exception:
         return None
-    best, best_rank = None, 99
+
+    wanted = {state} if state else set(_STATES)
+    best, best_rank, best_pop = None, 99, -1
     for res in results:
         if res.get("country_code") != "US":
             continue
-        rank = _STATES.get(res.get("admin1", ""), 9)
-        if rank < best_rank:
-            best, best_rank = res, rank
+        admin1 = res.get("admin1", "")
+        if admin1 not in wanted:
+            continue
+        rank = _STATES.get(admin1, 9)
+        pop = res.get("population") or 0
+        if (rank, -pop) < (best_rank, -best_pop):
+            best, best_rank, best_pop = res, rank, pop
     if best is None:
         return None
     return best["latitude"], best["longitude"]
 
 
 def geocode_lakes(conn: sqlite3.Connection, force: bool = False) -> dict:
+    """Resolve coordinates for every lake.
+
+    The network phase runs first and the database is written afterwards: holding
+    a write transaction open across HTTP calls locks out anything else using the
+    database, which is fatal to a crawl running at the same time.
+    """
     overrides = _load_overrides()
     rows = conn.execute(
         "SELECT lake_id, name, town, lat, lon FROM lakes ORDER BY report_count DESC"
     ).fetchall()
     stats = {"override": 0, "geocoded": 0, "cached": 0, "failed": 0, "no_town": 0}
-    cache: dict[str, tuple[float, float] | None] = {}
+    cache: dict[tuple, tuple[float, float] | None] = {}
+    pending: list[tuple[float, float, int]] = []
 
     with httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=30,
                       follow_redirects=True) as client:
         for r in rows:
             if r["name"] in overrides:
                 lat, lon = overrides[r["name"]]
-                conn.execute("UPDATE lakes SET lat=?, lon=? WHERE lake_id=?",
-                             (lat, lon, r["lake_id"]))
+                pending.append((lat, lon, r["lake_id"]))
                 stats["override"] += 1
                 continue
             if r["lat"] is not None and not force:
                 stats["cached"] += 1
                 continue
+
             town = (r["town"] or "").strip()
+            state = None
+            # A few listing strings carry "<Lake>, <Town>, <ST>", which leaves a
+            # bare state code in the town column.
+            if town.upper() in _STATE_CODES:
+                state = _STATE_CODES[town.upper()]
+                town = (r["name"] or "").rsplit(",", 1)[-1].strip()
             if not town:
                 stats["no_town"] += 1
                 continue
-            if town not in cache:
-                cache[town] = geocode_town(client, town)
+
+            key = (town, state)
+            if key not in cache:
+                cache[key] = geocode_town(client, town, state)
                 time.sleep(0.25)
-            hit = cache[town]
+            hit = cache[key]
             if hit is None:
                 stats["failed"] += 1
                 continue
-            conn.execute("UPDATE lakes SET lat=?, lon=? WHERE lake_id=?",
-                         (hit[0], hit[1], r["lake_id"]))
+            pending.append((hit[0], hit[1], r["lake_id"]))
             stats["geocoded"] += 1
+
+    # Single short write transaction, after all network work is done.
+    conn.executemany("UPDATE lakes SET lat=?, lon=? WHERE lake_id=?", pending)
     conn.commit()
     return stats
 
