@@ -8,13 +8,16 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from functools import lru_cache
 
 from .config import DATA, HOURS_BY_SLOT
 from .crawl import iter_cached
 from .parse_index import parse as parse_index
 from .parse_report import parse as parse_report
+
+# Median days between fishing and posting, measured on reports that state both.
+POST_LAG_DAYS = 1
 
 _SEASONS = {12: "winter", 1: "winter", 2: "winter", 3: "spring", 4: "spring",
             5: "spring", 6: "summer", 7: "summer", 8: "summer",
@@ -134,8 +137,23 @@ def build_trips(conn: sqlite3.Connection) -> dict:
         if r["trip_date"]:
             trip_date, src = r["trip_date"], "reservation"
         else:
-            trip_date = r["posted_date"] or (ix["posted_date"] if ix else None)
-            src = "posted" if trip_date else None
+            # Legacy reports carry no reservation date. Measured against the
+            # 2019+ reports that have both, the median gap between fishing and
+            # posting is one day (the club pays a credit for reporting within
+            # 24 hours): 28% post same-day, 52% the next day. Backing the
+            # posted date up by POST_LAG_DAYS lands on the right day for about
+            # half of them instead of about a quarter - but it is an estimate,
+            # and `trip_date_source` marks it so weather-sensitive analysis can
+            # exclude it.
+            posted = r["posted_date"] or (ix["posted_date"] if ix else None)
+            trip_date, src = None, None
+            if posted:
+                try:
+                    trip_date = (date.fromisoformat(posted)
+                                 - timedelta(days=POST_LAG_DAYS)).isoformat()
+                    src = "posted_estimate"
+                except ValueError:
+                    trip_date, src = posted, "posted_estimate"
 
         fish = parse_total_fish(r["total_fish_raw"])
         hours = HOURS_BY_SLOT.get(r["time_slot"] or "", None)

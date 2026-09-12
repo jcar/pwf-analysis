@@ -12,8 +12,9 @@ taxonomy practical.
 
 1. **Crawls** the public report pages once (~13k reports, 2010–2026) and caches the
    raw HTML, so no later step ever needs the network again.
-2. **Parses** two page shapes: the structured reports (2019+, with `Lures Used` and
-   `Total Fish/Sizes` fields) and the legacy narrative-only ones.
+2. **Parses** two page shapes: the structured reports (2019+, which *may* carry
+   `Lures Used` and `Total Fish/Sizes` fields — those are optional and about 58% of
+   all reports fill them in) and the legacy narrative-only ones.
 3. **Attributes lakes from the listing index**, which carries `Property : <Lake>,
    <Town>` back to mid-2012 — years before the detail pages gained the field.
 4. **Extracts by rule**: a lure taxonomy of ~230 surface forms, catch counts and
@@ -54,14 +55,28 @@ pwf dashboard                       # build the aggregate page
 Members record what they caught and what they threw far more reliably than they record
 the water. Measured on a 200-report sample:
 
-| Available on almost every trip | Only when a member wrote it down |
-|---|---|
-| lake (92%), catch count (94%), bait (80%) | cover/structure (56%), time of day (61%) |
-| weather, pressure + trend, wind, cloud (100% of attributed trips) | vegetation (31%), technique (31%), clarity (26%), depth (18%), water temp (14%) |
+Measured across all 13,672 reports:
 
-This is why the weather join matters: it supplies exactly the conditions the
-narratives leave out. `pwf coverage` prints the live numbers, and the test suite
-asserts floors so a rule edit cannot quietly lose recall.
+| Available on most trips | Only when a member wrote it down |
+|---|---|
+| a written narrative (99%) | time of day (59%) |
+| bait named, field or narrative (86%) | cover/structure (54%) |
+| lake identified (89%) | technique (36%) |
+| bait matched to the taxonomy (92% of the 58% that name one) | vegetation (33%) |
+| countable catch (56%) | water clarity (25%) |
+| exact reservation date (58%) | depth fished (15%) |
+| weather, pressure + trend, wind, cloud — every trip with a lake and a date | water temperature (13%) |
+
+Two of those deserve emphasis. **Only 56% of reports give a countable catch**, so
+that is the real denominator for every catch-rate figure — about 7,600 trips, not
+13,672. And **the structured fields are optional**: roughly 58% of reports fill in
+`Lures Used`, which is why the narrative scan matters — together they name a bait on
+86% of trips.
+
+This is also why the weather join earns its place: it supplies exactly the conditions
+the narratives leave out, for every trip that has a lake and a date. `pwf coverage`
+prints the live numbers, and the test suite asserts floors so a rule edit cannot
+quietly lose recall.
 
 ## Honest limits
 

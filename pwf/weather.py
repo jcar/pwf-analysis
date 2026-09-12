@@ -103,8 +103,65 @@ def _store(conn: sqlite3.Connection, rows: list[tuple]) -> None:
         " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
 
 
-def backfill(conn: sqlite3.Connection, progress=print) -> dict:
-    """Fetch history for every lake that has geocoded coordinates and trips."""
+# The Open-Meteo archive is ERA5, whose native grid is 0.25 degrees. Rounding
+# lake coordinates onto that grid therefore loses no information at all - two
+# lakes in the same cell would be served the same model gridpoint anyway - while
+# collapsing ~180 lakes into ~90 requests. Long-span requests are weighted
+# heavily by the API's rate limiter, so this matters.
+GRID = 0.25
+MAX_RETRIES = 10
+# Open-Meteo meters by request *weight*, roughly (days x variables) / 1000, and
+# its per-minute bucket is far smaller than its hourly one. A fixed delay
+# therefore over-sends on long spans and wastes time on short ones; pace on the
+# weight of the request just made instead.
+UNITS_PER_MINUTE = 450.0
+# Floor between requests. The archive's free tier meters by the hour and by the
+# day as well as by the minute, so once a large backfill has drained the bucket
+# the only way through is to go slowly and let it refill.
+FLOOR_DELAY = 20.0
+N_DAILY_VARS = 8
+MIN_DELAY = 1.0
+
+
+def request_units(days: int) -> float:
+    return max(1.0, days * N_DAILY_VARS / 1000.0)
+
+
+def pace_delay(days: int) -> float:
+    return max(FLOOR_DELAY, request_units(days) / UNITS_PER_MINUTE * 60.0)
+
+
+def grid_key(lat: float, lon: float) -> tuple[float, float]:
+    return (round(lat / GRID) * GRID, round(lon / GRID) * GRID)
+
+
+def _fetch_with_backoff(client: httpx.Client, lat: float, lon: float,
+                        start: date, end: date, progress) -> dict[str, list]:
+    """Fetch one span, backing off politely when the archive rate-limits us."""
+    delay = 15.0
+    for attempt in range(MAX_RETRIES):
+        try:
+            return fetch_range(client, lat, lon, start, end)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 429:
+                raise
+            retry_after = exc.response.headers.get("retry-after")
+            wait = float(retry_after) if retry_after and retry_after.isdigit() \
+                else delay * (2 ** attempt)
+            wait = min(wait, 600.0)
+            progress(f"  rate limited, waiting {wait:.0f}s")
+            time.sleep(wait)
+    raise RuntimeError("gave up after repeated rate limiting")
+
+
+def backfill(conn: sqlite3.Connection, progress=print,
+             refresh: bool = False) -> dict:
+    """Fetch history for every lake that has coordinates and trips.
+
+    Lakes are grouped onto the ERA5 grid so one request serves every lake in a
+    cell. Resumable: a cell whose lakes already have their full span stored is
+    skipped, so re-running after a rate-limit stall costs nothing.
+    """
     lakes = conn.execute("""
         SELECT l.lake_id, l.name, l.lat, l.lon,
                MIN(t.trip_date) AS d0, MAX(t.trip_date) AS d1, COUNT(*) AS n
@@ -112,33 +169,61 @@ def backfill(conn: sqlite3.Connection, progress=print) -> dict:
         WHERE l.lat IS NOT NULL AND t.trip_date IS NOT NULL
         GROUP BY l.lake_id ORDER BY n DESC""").fetchall()
 
-    stats = {"lakes": 0, "rows": 0, "failed": 0}
+    cells: dict[tuple, list] = {}
+    for lk in lakes:
+        cells.setdefault(grid_key(lk["lat"], lk["lon"]), []).append(lk)
+
+    have = {}
+    for lake_id, lo, hi in conn.execute(
+            "SELECT lake_id, MIN(date), MAX(date) FROM conditions GROUP BY lake_id"):
+        have[lake_id] = (lo, hi)
+
+    stats = {"cells": 0, "lakes": 0, "rows": 0, "skipped": 0, "failed": 0}
     today = date.today()
-    with httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=90,
+
+    with httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=120,
                       follow_redirects=True) as client:
-        for i, lk in enumerate(lakes, 1):
+        for i, (key, members) in enumerate(cells.items(), 1):
             try:
-                start = date.fromisoformat(lk["d0"]) - timedelta(days=3)
-                end = min(date.fromisoformat(lk["d1"]), today - timedelta(days=1))
+                start = min(date.fromisoformat(m["d0"]) for m in members) \
+                    - timedelta(days=3)
+                end = min(max(date.fromisoformat(m["d1"]) for m in members),
+                          today - timedelta(days=1))
             except (TypeError, ValueError):
                 continue
             if end < start:
                 continue
+
+            if not refresh:
+                covered = all(
+                    m["lake_id"] in have
+                    and have[m["lake_id"]][0] <= start.isoformat()
+                    and have[m["lake_id"]][1] >= end.isoformat()
+                    for m in members)
+                if covered:
+                    stats["skipped"] += len(members)
+                    continue
+
+            lat, lon = key
             try:
-                s = fetch_range(client, lk["lat"], lk["lon"], start, end)
-                rows = _rows_from_series(lk["lake_id"], lk["lat"], lk["lon"], s)
-                # Write and commit immediately - the fetch above must never sit
-                # inside an open write transaction.
-                _store(conn, rows)
-                conn.commit()
-                stats["lakes"] += 1
-                stats["rows"] += len(rows)
+                series = _fetch_with_backoff(client, lat, lon, start, end, progress)
             except Exception as exc:
                 stats["failed"] += 1
-                progress(f"  ! {lk['name']}: {type(exc).__name__}: {exc}")
-            if i % 10 == 0:
-                progress(f"  weather {i}/{len(lakes)} lakes, {stats['rows']} rows")
-            time.sleep(0.2)
+                progress(f"  ! cell {key}: {type(exc).__name__}")
+                continue
+
+            stats["cells"] += 1
+            for m in members:
+                rows = _rows_from_series(m["lake_id"], m["lat"], m["lon"], series)
+                _store(conn, rows)
+                stats["lakes"] += 1
+                stats["rows"] += len(rows)
+            conn.commit()
+
+            span_days = (end - start).days + 1
+            progress(f"  cell {i}/{len(cells)} - {len(members)} lakes - "
+                     f"{span_days}d - {stats['rows']} rows total")
+            time.sleep(pace_delay(span_days))
     conn.commit()
     return stats
 

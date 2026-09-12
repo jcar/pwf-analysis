@@ -184,3 +184,38 @@ class TestTagsAndWindows:
         assert P.skunked("We got skunked today.", 0) == 1
         # A stated catch overrides any unlucky phrasing in the prose.
         assert P.skunked("My buddy got skunked but I did fine.", 12) == 0
+
+
+class TestBagWeights:
+    """Texas anglers report five-fish tournament bags as often as single fish.
+    Read as one fish, a bag weight produces impossible records - the state
+    record largemouth is 18.18 lb, and the archive was claiming 25."""
+
+    @pytest.mark.parametrize("raw", [
+        "10 Best Five 21 lbs",
+        "12. 19lb bag",
+        "3, totaling 14 lbs",
+        "75 - 23 lbs 5 biggest",
+        "8 fish, stringer 16 lbs",
+    ])
+    def test_bag_weight_is_not_a_fish(self, raw):
+        assert parse_total_fish(raw)["max_weight_lb"] is None
+
+    @pytest.mark.parametrize("raw,lb", [
+        ("12. 19lb bag. Largest 5lbs", 5.0),      # nearby marker beats the bag
+        ("13 total LMB - Range 2lbs - 5.3lbs", 5.3),  # "total" counts fish here
+        ("66 total - 56 harvested (up to 5.0 lbs)", 5.0),
+        ("4 LMB - 2-2.5 lbs", 2.5),
+    ])
+    def test_single_fish_marker_wins(self, raw, lb):
+        assert parse_total_fish(raw)["max_weight_lb"] == lb
+
+    def test_leading_dot_decimal(self):
+        """'.25lbs' must be a quarter pound, not twenty-five."""
+        assert parse_total_fish("15/.25lbs/3lbs")["max_weight_lb"] == 3.0
+        assert parse_total_fish("1 @ .25lbs")["max_weight_lb"] == 0.25
+
+    def test_over_state_record_rejected(self):
+        from pwf.rules.fish import MAX_SINGLE_FISH_LB
+        assert MAX_SINGLE_FISH_LB <= 18.2
+        assert parse_total_fish("one fish 24 lb")["max_weight_lb"] is None

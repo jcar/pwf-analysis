@@ -106,28 +106,57 @@ class TestFrames:
 
 
 class TestCoverageFloors:
-    """Measured on a 200-report live sample. If a rule edit drops below these,
-    something regressed - the numbers only move up with better rules."""
-    FLOORS = {"lure_field_matched": 82.0, "clarity": 18.0, "water_temp": 7.0,
-              "bite_window": 45.0, "structure": 45.0, "vegetation": 25.0,
-              "technique": 20.0, "depth": 12.0}
+    """Regression floors, set just under the values measured on the full
+    13,672-report corpus. These only ever move up: a rule edit that drops one
+    below its floor has lost recall, which is exactly what should fail a build.
+    """
 
-    def test_floors_declared_for_every_partial_dimension(self):
-        from pwf.rules.extract import FULL_TIER
-        assert FULL_TIER  # sanity: the tier split exists
-        assert set(self.FLOORS) - FULL_TIER == set(self.FLOORS)
+    FLOORS = {
+        # full tier
+        "lure_field_matched": 88.0,   # measured 92.1
+        "lake": 85.0,                 # measured 89.1
+        "lure_any": 82.0,             # measured 85.8
+        "fish_count": 52.0,           # measured 55.7
+        # partial tier - what members actually bothered to write down
+        "narrative": 95.0,            # measured 99.0
+        "bite_window": 55.0,          # measured 58.5
+        "structure": 50.0,            # measured 53.8
+        "technique": 32.0,            # measured 35.8
+        "vegetation": 30.0,           # measured 32.5
+        "clarity": 23.0,              # measured 25.4
+        "depth": 14.0,                # measured 15.4
+        "water_temp": 12.0,           # measured 13.3
+    }
 
-    @pytest.mark.skipif(not (init.__module__), reason="always runs")
     def test_live_coverage_meets_floors(self):
-        """Skipped automatically when the database has not been built yet."""
         from pwf.config import DB_PATH
         if not DB_PATH.exists():
             pytest.skip("no database yet - run `pwf build`")
         conn = init(DB_PATH)
         df = A.coverage(conn)
         if df.empty:
-            pytest.skip("coverage not computed yet")
+            pytest.skip("coverage not computed yet - run `pwf build`")
         got = dict(zip(df["dimension"], df["pct"]))
-        for dim, floor in self.FLOORS.items():
-            if dim in got:
-                assert got[dim] >= floor, f"{dim} fell to {got[dim]}% (floor {floor}%)"
+        missing = [d for d in self.FLOORS if d not in got]
+        assert not missing, f"coverage rows absent: {missing}"
+        low = {d: got[d] for d, floor in self.FLOORS.items() if got[d] < floor}
+        assert not low, f"coverage regressed: {low}"
+
+    def test_catch_rate_denominator_is_stated(self):
+        """Catch rates rest on the reports that gave a countable number, which
+        is barely half of them. If that is ever silently assumed to be all
+        reports, every rate on the page is inflated."""
+        from pwf.config import DB_PATH
+        if not DB_PATH.exists():
+            pytest.skip("no database yet")
+        conn = init(DB_PATH)
+        total = conn.execute("SELECT COUNT(*) FROM trips").fetchone()[0]
+        scored = conn.execute(
+            "SELECT COUNT(*) FROM trips WHERE fish_per_hour IS NOT NULL").fetchone()[0]
+        if not total:
+            pytest.skip("no trips yet")
+        assert scored < total, "scored trips must be a strict subset"
+        df = A.trips_frame(conn)
+        out = A.lure_lift(df, A.lures_frame(conn))
+        if not out.empty:
+            assert int(out["scored_trips"].iloc[0]) == scored

@@ -174,6 +174,8 @@ def baits(lake: str = typer.Option(None), cohort: str = typer.Option(None),
           clarity: str = typer.Option(None, help="murky|stained|clear"),
           max_acres: float = typer.Option(None), wind: str = typer.Option(None),
           level: str = typer.Option("category", help="category|subtype"),
+          exact_dates: bool = typer.Option(
+              False, help="Only trips with an exact reservation date"),
           min_n: int = typer.Option(3)):
     """Rank baits within a slice of the archive."""
     conn = _db()
@@ -195,6 +197,11 @@ def baits(lake: str = typer.Option(None), cohort: str = typer.Option(None),
         df = df[df["wind_band"] == wind]; desc.append(f"wind={wind}")
     if max_acres:
         df = df[df["acres"] <= max_acres]; desc.append(f"acres<={max_acres:g}")
+    if exact_dates or pressure:
+        # Pressure is a same-day reading; an estimated date makes it noise.
+        df = df[df["trip_date_source"] == "reservation"]
+        if "exact dates" not in desc:
+            desc.append("exact dates")
 
     if df.empty:
         console.print("[yellow]No trips match that slice.[/yellow]")

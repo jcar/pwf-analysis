@@ -127,9 +127,13 @@ def _record_coverage(conn: sqlite3.Connection, cov: Counter, total: int) -> None
     lake = conn.execute("SELECT COUNT(*) FROM trips WHERE lake_known=1").fetchone()[0]
     exact = conn.execute(
         "SELECT COUNT(*) FROM trips WHERE trip_date_source='reservation'").fetchone()[0]
+    est = conn.execute(
+        "SELECT COUNT(*) FROM trips WHERE trip_date_source='posted_estimate'"
+    ).fetchone()[0]
     trips = conn.execute("SELECT COUNT(*) FROM trips").fetchone()[0] or total
     rows.append(("lake", lake, trips))
     rows.append(("trip_date_exact", exact, trips))
+    rows.append(("trip_date_estimated", est, trips))
 
     for dim in ("fish_count", "lure_any", "lure_field", "lure_field_matched",
                 "narrative", "clarity", "water_temp", "depth", "bite_window",

@@ -32,13 +32,33 @@ SPECIES_ALIASES = [
 ]
 _SPECIES_RX = [(name, re.compile(pat, re.I)) for name, pat in SPECIES_ALIASES]
 
-_NUM = r"\d+(?:[.,]\d+)?"
+# Leading-dot decimals are common in this field (".25lbs"); without the
+# alternation below, ".25" parses as 25 and a quarter-pound dink becomes a
+# world record.
+_NUM = r"(?:\d+(?:[.,]\d+)?|[.,]\d+)"
 _WEIGHT_UNIT = r"(?:lbs?\b|lb\b|pounds?\b|#)"
 _LEN_UNIT = r"(?:\"|”|''|inch(?:es)?\b|in\b)"
 
 # A number that is immediately followed by a unit is a size, not a count.
 _SIZE_NUM = re.compile(rf"{_NUM}\s*(?:{_WEIGHT_UNIT}|{_LEN_UNIT})", re.I)
 _WEIGHT = re.compile(rf"({_NUM})\s*{_WEIGHT_UNIT}", re.I)
+# Texas anglers routinely report a five-fish tournament bag rather than a single
+# fish ("10 Best Five 21 lbs", "19lb bag", "3, totaling 14 lbs"). Read as a
+# single fish those become impossible records, so a weight preceded by any of
+# these is discarded rather than treated as the biggest fish of the day.
+_BAG_CONTEXT = re.compile(
+    r"(?:\bbag\b|best\s*(?:five|5)\b|top\s*(?:five|5)\b|\bstringer\b|"
+    r"total(?:ing|ling)\b|\bcombined\b|all\s*together|altogether|"
+    r"\d+\s*(?:biggest|best|largest)\b)", re.I)
+# A marker that the number really is one fish. When one of these sits beside the
+# number it wins over any bag language further away, so "19lb bag. Largest 5lbs"
+# still yields five pounds.
+_SINGLE_FISH = re.compile(
+    r"(?:largest|biggest|big\s*(?:one|fish)|best\s*fish|up\s*to|max\b|"
+    r"@|\bto\b|-\s*$)", re.I)
+# The Texas state record largemouth is 18.18 lb. Anything heavier in this field
+# is a bag weight, a typo, or a catfish - not a bass anyone landed.
+MAX_SINGLE_FISH_LB = 18.0
 _LENGTH = re.compile(rf"({_NUM})\s*{_LEN_UNIT}", re.I)
 _COUNT_SPECIES = re.compile(
     rf"(\d+)\s*(?:[a-z]+\s+){{0,2}}?"
@@ -50,7 +70,8 @@ _VAGUE = re.compile(r"\b(?:lots|bunch|many|several|plenty|fair number|"
 
 
 def _f(s: str) -> float:
-    return float(s.replace(",", "."))
+    s = s.replace(",", ".")
+    return float("0" + s if s.startswith(".") else s)
 
 
 def parse_total_fish(raw: str | None) -> dict:
@@ -61,8 +82,21 @@ def parse_total_fish(raw: str | None) -> dict:
         return out
     s = raw.strip()
 
-    weights = [_f(m.group(1)) for m in _WEIGHT.finditer(s)]
-    weights = [w for w in weights if 0.1 <= w <= 25]
+    weights = []
+    for m in _WEIGHT.finditer(s):
+        # Look immediately around the number. A single-fish marker close by wins
+        # over bag language further off; otherwise bag language disqualifies it.
+        lead = s[max(0, m.start() - 16): m.start()]
+        trail = s[m.end(): m.end() + 12]
+        if not _SINGLE_FISH.search(lead):
+            if _BAG_CONTEXT.search(lead) or _BAG_CONTEXT.search(trail):
+                continue
+        try:
+            w = _f(m.group(1))
+        except ValueError:
+            continue
+        if 0.1 <= w <= MAX_SINGLE_FISH_LB:
+            weights.append(w)
     if weights:
         out["max_weight_lb"] = max(weights)
 

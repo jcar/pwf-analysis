@@ -35,13 +35,19 @@ def collect(conn: sqlite3.Connection) -> dict:
     lures = A.lures_frame(conn)
     scored = trips.dropna(subset=["fish_per_hour"])
 
+    # Same-day weather only means anything for trips whose date is exact.
+    # Legacy reports carry a date estimated from when they were posted, and a
+    # one-day error destroys a pressure reading, so they are excluded here.
+    exact = scored[scored["trip_date_source"] == "reservation"]
+
     out: dict = {"headline": _headline(conn, trips, scored),
                  "coverage": _coverage(conn),
                  "by_month": _by_month(scored),
                  "heatmap": _heatmap(trips, lures),
-                 "pressure": _condition(scored, lures, "pressure_trend",
+                 "exact_trips": int(len(exact)),
+                 "pressure": _condition(exact, lures, "pressure_trend",
                                         ["falling", "steady", "rising"]),
-                 "clouds": _condition(scored, lures, "cloud_band",
+                 "clouds": _condition(exact, lures, "cloud_band",
                                       ["clear_sky", "partly", "overcast"]),
                  "baits_overall": _baits_overall(trips, lures),
                  "lakes": _lakes(trips),
@@ -70,9 +76,11 @@ def _coverage(conn) -> list[dict]:
     if df.empty:
         return []
     label = {
-        "lake": "Lake identified", "trip_date_exact": "Exact trip date",
+        "lake": "Lake identified",
         "fish_count": "Countable catch", "lure_any": "Bait named",
         "lure_field_matched": "Bait matched to taxonomy",
+        "trip_date_exact": "Exact trip date (reservation)",
+        "trip_date_estimated": "Trip date estimated from posting",
         "narrative": "Has a written report", "clarity": "Water clarity stated",
         "water_temp": "Water temperature stated", "depth": "Depth stated",
         "bite_window": "Time of day stated", "vegetation": "Vegetation described",

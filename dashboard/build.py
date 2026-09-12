@@ -241,8 +241,11 @@ footer p{margin:0 0 11px}
 <section>
   <div class="shead"><h2>When the barometer moves</h2></div>
   <p class="note">Trips grouped by the 24-hour pressure change at the lake on the day
-  they were fished. A front is the one condition anglers plan around, and it is
-  recorded for every trip whether or not the member mentioned the weather.</p>
+  they were fished. A front is the one condition anglers plan around, and it is on
+  record for every trip whether or not the member mentioned the weather. Restricted
+  to <span id="exact-n" class="num"></span> trips whose exact date is known from a
+  reservation &mdash; older reports carry a date estimated from when they were
+  posted, and a one-day error ruins a pressure reading.</p>
   <div class="panels" id="pressure"></div>
 </section>
 
@@ -385,6 +388,8 @@ function panels(target, rows, labels) {
     p.append(ol); box.append(p);
   });
 }
+const exn = document.getElementById("exact-n");
+if (exn) exn.textContent = (D.exact_trips || 0).toLocaleString();
 panels("#pressure", D.pressure, D.trend_labels);
 panels("#clouds", D.clouds, D.trend_labels);
 
