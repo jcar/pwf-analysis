@@ -5,11 +5,13 @@ re-run at any time - every table it owns is rebuilt from scratch.
 """
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from datetime import date, datetime
+from functools import lru_cache
 
-from .config import HOURS_BY_SLOT
+from .config import DATA, HOURS_BY_SLOT
 from .crawl import iter_cached
 from .parse_index import parse as parse_index
 from .parse_report import parse as parse_report
@@ -177,22 +179,31 @@ def slugify(name: str) -> str:
     return re.sub(r"_+", "_", s).strip("_")
 
 
-def lake_slugs(conn: sqlite3.Connection) -> list[str]:
-    """Candidate slugs for every known lake, busiest first."""
-    out, seen = [], set()
-    for r in conn.execute(
-            "SELECT name FROM lakes ORDER BY report_count DESC"):
-        for cand in _slug_variants(r["name"]):
-            if cand not in seen:
-                seen.add(cand)
-                out.append(cand)
-    return out
+def lake_variant_map(conn: sqlite3.Connection) -> dict[str, list[str]]:
+    """Candidate slugs per lake, busiest lake first."""
+    return {r["name"]: _slug_variants(r["name"])
+            for r in conn.execute(
+                "SELECT name FROM lakes ORDER BY report_count DESC")}
+
+
+@lru_cache(maxsize=1)
+def _site_slugs() -> dict[str, str]:
+    """Authoritative name -> slug pairs harvested from the site's own property
+    listing endpoint. The site's slugs are not always derivable from the name
+    ("Beaver Lake: Heartland 10-10 Ranch" is `heartland_beaver_2`), so these
+    win over anything guessed."""
+    path = DATA / "site_slugs.json"
+    if not path.exists():
+        return {}
+    raw = json.loads(path.read_text())
+    return {re.sub(r"[^a-z0-9]", "", v.lower()): k for k, v in raw.items()}
 
 
 def _slug_variants(name: str) -> list[str]:
     """The site is inconsistent, so try a few plausible spellings."""
+    known = _site_slugs().get(re.sub(r"[^a-z0-9]", "", name.lower()))
     base = slugify(name)
-    variants = [base]
+    variants = [known, base] if known else [base]
     # "Dogwood Lakes Estate: East Lake" also appears as just its second half.
     if ":" in name:
         tail = slugify(name.split(":", 1)[1])

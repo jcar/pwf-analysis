@@ -116,3 +116,33 @@ class TestListingIndex:
     ])
     def test_split_property(self, raw, expected):
         assert split_property(raw) == expected
+
+
+class TestLakePage:
+    def test_attributes(self, fx):
+        from pwf.parse_lake import parse as parse_lake
+        r = parse_lake(fx("lake_northeast_lake"), "northeast_lake")
+        assert r["acres"] == 13.0
+        assert r["max_depth_ft"] == 15.0
+        assert r["day_rate"] == 95.0
+        assert r["half_day_rate"] == 70.0
+        assert r["bank_fishing"] == 1
+        assert r["membership_tier"] == "Gold and Silver Members"
+        assert r["region"] == "Dallas / Fort Worth Area"
+        assert "harvest all bass 14 inches" in r["harvest_rules"]
+
+    def test_embedded_reports_do_not_pollute_lake_attributes(self, fx):
+        """Lake pages carry member reports below the description. A lure list
+        containing 'deep diving crank' must not be read as lake depth, and a
+        report's fish weights must not be read as acreage."""
+        from pwf.parse_lake import parse as parse_lake
+        html = fx("lake_northeast_lake")
+        assert "Lures Used" in html, "fixture must contain embedded reports"
+        r = parse_lake(html, "northeast_lake")
+        assert r["max_depth_ft"] == 15.0
+        assert r["acres"] == 13.0
+
+    def test_boat_type_stops_at_next_section(self, fx):
+        from pwf.parse_lake import parse as parse_lake
+        r = parse_lake(fx("lake_northeast_lake"), "northeast_lake")
+        assert "Boat Launch" not in (r["boat_type"] or "")

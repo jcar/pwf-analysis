@@ -21,27 +21,44 @@ def parse(html: str, slug: str) -> dict | None:
     h1 = tree.css_first("h1") or tree.css_first("h2")
     name = _clean(h1.text()) if h1 is not None else None
 
+    # Lake pages embed recent fishing reports below the description. Depth and
+    # acreage must come from the description only, or "deep diving crank" in a
+    # member's lure list gets read as lake depth.
+    # Cut at the first embedded report. "Fishing Reports" is unusable as a
+    # marker because it also appears in the nav above the description;
+    # "Reservation Number" only ever appears inside a member's report.
+    info = re.split(r"Reservation Number", text, maxsplit=1)[0]
+
     def after(label: str, window: int = 120) -> str | None:
         m = re.search(re.escape(label) + r"\s*(.{0,%d})" % window, text, re.I)
         return _clean(m.group(1)) if m else None
 
     acres = None
-    m = re.search(rf"{_NUM}\s*(?:\+/-\s*)?acres?", text, re.I)
+    m = re.search(rf"{_NUM}\s*(?:\+/-\s*)?acres?", info, re.I)
     if m:
         try:
             acres = float(m.group(1))
         except ValueError:
             acres = None
 
-    depth = None
-    m = re.search(rf"depths?\s*(?:up\s*)?to\s*{_NUM}\s*(?:feet|foot|ft)", text, re.I)
-    if not m:
-        m = re.search(rf"{_NUM}\s*(?:feet|foot|ft)\s*(?:deep|in depth|max)", text, re.I)
-    if m:
-        try:
-            depth = float(m.group(1))
-        except ValueError:
-            depth = None
+    # Members and copywriters phrase depth a dozen ways: "depths reaching 45
+    # feet", "depths of up to 28 feet", "deep pockets (up to 32 feet)",
+    # "ranging from 6-8 feet", "under 6 feet deep". Take the deepest match.
+    depth_pats = [
+        rf"depths?[^.\d]{{0,28}}?{_NUM}\s*(?:-|to|–|—)?\s*(?:\d+(?:\.\d+)?)?\s*(?:feet|foot|ft)\b",
+        rf"(?:deep|depth)[^.\d]{{0,24}}?\({{0,1}}\s*up to\s*{_NUM}\s*(?:feet|foot|ft)\b",
+        rf"{_NUM}\s*(?:feet|foot|ft)\s*(?:deep|in depth|of depth)\b",
+    ]
+    found = []
+    for pat in depth_pats:
+        for m in re.finditer(pat, info, re.I):
+            try:
+                v = float(m.group(1))
+            except (TypeError, ValueError):
+                continue
+            if 2 <= v <= 120:
+                found.append(v)
+    depth = max(found) if found else None
 
     def money(label: str) -> float | None:
         m = re.search(re.escape(label) + r"\D{0,30}?\$\s*([\d,]+(?:\.\d+)?)", text, re.I)

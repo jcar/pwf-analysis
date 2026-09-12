@@ -11,6 +11,7 @@ import asyncio
 import gzip
 import random
 import sqlite3
+import time
 from datetime import datetime
 
 import httpx
@@ -204,12 +205,47 @@ def crawl_reports(conn, max_id: int | None = None, refresh: bool = False,
     return asyncio.run(_run(conn, urls, "reports", progress))
 
 
-def crawl_lakes(conn, slugs: list[str], refresh: bool = False,
-                progress=_default_progress) -> dict:
-    seen = set() if refresh else have(conn, "lake")
-    urls = [(C.LAKE_URL.format(slug=s), "lake", s) for s in slugs]
-    todo = [u for u in urls if u[0] not in seen]
-    if not todo:
-        print("  [lakes] nothing to do")
-        return {"ok": 0, "missing": 0, "failed": 0}
-    return asyncio.run(_run(conn, todo, "lakes", progress))
+def crawl_lakes(conn, lake_variants: dict[str, list[str]], refresh: bool = False,
+                progress=_default_progress, delay: float | None = None) -> dict:
+    """Fetch one property page per lake.
+
+    Slugs are guessed from the lake name, so each lake's candidates are tried in
+    order and the first HTTP 200 wins - a wrong guess returns a clean 404, which
+    costs one request rather than polluting the cache.
+    """
+    import httpx as _httpx
+
+    seen = have(conn, "lake")
+    delay = C.DELAY_SECONDS if delay is None else delay
+    stats = {"ok": 0, "missing": 0, "failed": 0, "lakes_hit": 0, "lakes_missed": 0}
+
+    with _httpx.Client(headers={"User-Agent": C.USER_AGENT}, timeout=C.TIMEOUT,
+                       follow_redirects=True) as client:
+        for i, (lake, variants) in enumerate(lake_variants.items(), 1):
+            already = [v for v in variants
+                       if C.LAKE_URL.format(slug=v) in seen]
+            if already and not refresh:
+                stats["lakes_hit"] += 1
+                continue
+            hit = False
+            for slug in variants:
+                url = C.LAKE_URL.format(slug=slug)
+                try:
+                    r = client.get(url)
+                except Exception:
+                    stats["failed"] += 1
+                    continue
+                time.sleep(delay)
+                if r.status_code == 200 and "Property Info" in r.text:
+                    _store(conn, url, "lake", slug, 200, r.text, False)
+                    stats["ok"] += 1
+                    hit = True
+                    break
+                stats["missing"] += 1
+            stats["lakes_hit" if hit else "lakes_missed"] += 1
+            if i % 20 == 0:
+                conn.commit()
+                progress(i, len(lake_variants), stats, "lakes")
+    conn.commit()
+    progress(len(lake_variants), len(lake_variants), stats, "lakes")
+    return stats

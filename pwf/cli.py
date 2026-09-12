@@ -63,8 +63,7 @@ def crawl(index: bool = typer.Option(False, help="Crawl listing pages only"),
         console.print(CR.crawl_reports(conn, refresh=refresh, limit=limit))
     if lakes or do_all:
         console.print("[bold]lake pages[/bold]")
-        slugs = B.lake_slugs(conn)
-        console.print(CR.crawl_lakes(conn, slugs, refresh=refresh))
+        console.print(CR.crawl_lakes(conn, B.lake_variant_map(conn), refresh=refresh))
 
 
 @app.command()

@@ -4,3 +4,6 @@ __pycache__/
 data/raw/
 data/pwf.sqlite*
 .pytest_cache/
+crawl.log
+dashboard/index.html
+data/lake_coords.csv
