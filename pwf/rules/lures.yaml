@@ -1,0 +1,156 @@
+# Lure taxonomy. Matched longest-phrase-first against normalised member text.
+#
+# Members write the same bait a dozen ways ("spinner bait" / "spinnerbait" /
+# "spinnerbaits" / "spinners"), mix colours into the name ("senko green"), and
+# conflate a rig with a bait ("wacky senko", "tx rig"). So each entry yields a
+# bait `category` + `subtype`, while rigs are emitted separately as techniques,
+# and colours are stripped out before matching.
+
+# Stripped from the string and recorded separately. Longest first.
+colors:
+  - green pumpkin
+  - black and blue
+  - black & blue
+  - black/blue
+  - blue/black
+  - watermelon red
+  - watermelon
+  - junebug
+  - june bug
+  - morning dawn
+  - sexy shad
+  - table rock
+  - okeechobee craw
+  - chartreuse
+  - bluegill
+  - bream
+  - perch
+  - shad
+  - craw
+  - crawfish
+  - pumpkin
+  - natural
+  - white
+  - black
+  - blue
+  - red
+  - chrome
+  - silver
+  - gold
+  - green
+  - purple
+  - clear
+  - bone
+  - olive
+  - brown
+  - yellow
+  - pink
+  - orange
+
+# Rigs / presentations. Recorded as techniques, and they also imply a soft
+# plastic when no other bait is named.
+techniques:
+  - {match: [texas rigged, texas rig, txrig, tx rig, t-rig, t rig], name: texas_rig, implies: soft_plastic}
+  - {match: [carolina rigged, carolina rig, c-rig, c rig], name: carolina_rig, implies: soft_plastic}
+  - {match: [drop shotting, drop shot, dropshot, drop-shot, ds rig], name: drop_shot, implies: soft_plastic}
+  - {match: [wacky rigged, wacky rig, wacky], name: wacky, implies: soft_plastic}
+  - {match: [neko rig, neko], name: neko, implies: soft_plastic}
+  - {match: [ned rig, ned head, ned], name: ned, implies: soft_plastic}
+  - {match: [shaky head, shakey head, shaky], name: shaky_head, implies: soft_plastic}
+  - {match: [split shot, splitshot], name: split_shot, implies: soft_plastic}
+  - {match: [weightless], name: weightless, implies: null}
+  - {match: [punching, punch rig, flipping and pitching, flipping, pitching], name: flip_punch, implies: null}
+  - {match: [free lined, free-lined, freelined, free line], name: freeline, implies: null}
+
+# Bait families. Order matters: the first match wins, so specific brand and
+# compound names must precede the generic term they contain.
+terms:
+  # --- topwater -----------------------------------------------------------
+  - {match: [whopper plopper, plopper, ploppers], category: topwater, subtype: prop}
+  - {match: [hollow body frog, hollow-body frog, frog, frogs, froggin], category: topwater, subtype: frog}
+  - {match: [horny toad, toad, ribbit], category: topwater, subtype: soft_toad}
+  - {match: [buzzbait, buzz bait, buzzbaits, buzz baits, buzzer], category: topwater, subtype: buzzbait}
+  - {match: [popper, poppers, pop r, pop-r, chug bug, chugger], category: topwater, subtype: popper}
+  - {match: [zara spook, spook, walking bait, walk the dog, sammy, gunfish], category: topwater, subtype: walker}
+  - {match: [wake bait, wakebait], category: topwater, subtype: wakebait}
+  - {match: [topwater, top water, top-water, surface lure], category: topwater, subtype: unspecified}
+
+  # --- bladed / spinner ---------------------------------------------------
+  - {match: [chatterbait, chatter bait, chatterbaits, chatter baits, chatter, bladed jig, vibrating jig, jack hammer, jackhammer], category: bladed_jig, subtype: bladed_jig}
+  - {match: [underspin, under spin, underspins, scrounger], category: underspin, subtype: underspin}
+  - {match: [spinnerbait, spinner bait, spinnerbaits, spinner baits, spinner, spinners, willow leaf, colorado blade], category: spinnerbait, subtype: spinnerbait}
+  - {match: [inline spinner, rooster tail, roostertail, mepps], category: spinnerbait, subtype: inline}
+
+  # --- hard baits ---------------------------------------------------------
+  - {match: [lipless crankbait, lipless crank, lipless, rattle trap, rat-l-trap, rattletrap, red eye shad, tiny trap, trap], category: lipless, subtype: lipless}
+  - {match: [square bill, squarebill, square-bill, kvd 1.5, 1.5 crank], category: crankbait, subtype: squarebill}
+  - {match: [deep diving crankbait, deep crank, deep diver, dd22, 6xd, 10xd], category: crankbait, subtype: deep}
+  - {match: [medium diving crank, mid depth crank], category: crankbait, subtype: medium}
+  - {match: [crankbait, crank bait, crankbaits, crank baits, cranks, crankin, crank], category: crankbait, subtype: unspecified}
+  - {match: [jerkbait, jerk bait, jerkbaits, jerk baits, rogue, x-rap, xrap, pointer, husky jerk], category: jerkbait, subtype: jerkbait}
+  - {match: [glide bait, glidebait, s-waver, swaver, hard swimbait, bull shad], category: swimbait, subtype: glide}
+  - {match: [rapala, minnow bait, countdown], category: jerkbait, subtype: minnow}
+  - {match: [spoon, spoons, johnson silver minnow, flutter spoon], category: spoon, subtype: spoon}
+
+  # --- jigs ---------------------------------------------------------------
+  - {match: [swim jig, swimjig, swimming jig], category: jig, subtype: swim_jig}
+  - {match: [football jig, football head, football], category: jig, subtype: football}
+  - {match: [flipping jig, flip jig, casting jig], category: jig, subtype: flipping}
+  - {match: [grass jig, punch jig], category: jig, subtype: grass}
+  - {match: [finesse jig, meat whistle, hair jig, marabou jig], category: jig, subtype: finesse}
+  - {match: [jig head, jighead], category: jig, subtype: jighead}
+  - {match: [crappie jig, tube jig for crappie, mini jig, marabou], category: crappie_jig, subtype: crappie_jig}
+  - {match: [jig, jigs, jigging], category: jig, subtype: unspecified}
+
+  # --- soft plastics ------------------------------------------------------
+  - {match: [paddle tail swimbait, paddle tail, paddletail, zako, zakos, keitech, swing impact, boot tail], category: soft_plastic, subtype: swimbait_soft}
+  - {match: [swimbait, swim bait, swimbaits, swim baits, swimmer], category: soft_plastic, subtype: swimbait_soft}
+  - {match: [senko, senkos, senco, sencos, sinko, sinkos, trick stick, yum dinger, dinger, ocho, stick bait, stickbait, stick worm], category: soft_plastic, subtype: stickbait}
+  - {match: [slug go, slug-go, slugo, fluke, flukes, jerk worm, soft jerkbait, super fluke], category: soft_plastic, subtype: fluke}
+  - {match: [brush hog, brushhog, biffle bug, bifflebug, beaver, rage bug, creature bait, creature baits, creature, sweet beaver, d bomb], category: soft_plastic, subtype: creature}
+  - {match: [trick worm, power worm, ribbon tail, ribbontail, curly tail worm, straight tail worm, finesse worm, plastic worm, plastic worms, worm, worms, nightcrawler plastic], category: soft_plastic, subtype: worm}
+  - {match: [rage craw, craw worm, crawdad, chunk trailer, crawfish trailer, craw trailer, rage tail], category: soft_plastic, subtype: craw}
+  - {match: [lizard, lizards, salamander, salamanders], category: soft_plastic, subtype: lizard}
+  - {match: [tube bait, tubes, tube], category: soft_plastic, subtype: tube}
+  - {match: [curly tail grub, grub, grubs], category: soft_plastic, subtype: grub}
+  - {match: [trailer], category: soft_plastic, subtype: trailer}
+  - {match: [soft plastics, soft plastic, plastics, plastic, sp], category: soft_plastic, subtype: unspecified}
+
+  # --- other --------------------------------------------------------------
+  - {match: [fly fishing, fly rod, fly, flies, popping bug, clouser, woolly bugger, wooly bugger], category: fly, subtype: fly}
+  - {match: [live bait, minnow, minnows, shiner, shiners, nightcrawler, night crawler, worm bait, cricket, crickets, stink bait, cut bait, chicken liver, punch bait], category: live_bait, subtype: live_bait}
+  - {match: [a rig, alabama rig, umbrella rig], category: other, subtype: alabama_rig}
+
+# Strings that name no bait. Recorded as ambiguous rather than sent to the
+# review queue, so the taxonomy hit-rate is not distorted by them.
+ambiguous:
+  - various
+  - variety
+  - everything
+  - everything else
+  - assorted
+  - mixed
+  - mixture
+  - several
+  - many
+  - multiple
+  - misc
+  - miscellaneous
+  - lots
+  - lures
+  - lure
+  - bait
+  - baits
+  - artificial
+  - artificials
+  - many different
+  - too many to list
+  - all of the above
+  - none
+  - n/a
+  - na
+  - nothing
+  - unknown
+  - mostly
+  - mainly
+  - some
