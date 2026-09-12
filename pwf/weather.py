@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import httpx
 
@@ -135,9 +135,22 @@ def grid_key(lat: float, lon: float) -> tuple[float, float]:
     return (round(lat / GRID) * GRID, round(lon / GRID) * GRID)
 
 
+def _seconds_to_next_hour() -> float:
+    now = datetime.now(timezone.utc)
+    nxt = (now + timedelta(hours=1)).replace(minute=0, second=20, microsecond=0)
+    return max(30.0, (nxt - now).total_seconds())
+
+
 def _fetch_with_backoff(client: httpx.Client, lat: float, lon: float,
                         start: date, end: date, progress) -> dict[str, list]:
-    """Fetch one span, backing off politely when the archive rate-limits us."""
+    """Fetch one span, waiting out the archive's rate limiter.
+
+    Open-Meteo meters by request *weight*, so a handful of multi-year requests
+    can exhaust an hourly budget denominated in "calls". When it reports the
+    hourly limit is gone, the only useful move is to sleep until that bucket
+    refills on the hour - exponential guessing just burns attempts against a
+    limit that will not move until then.
+    """
     delay = 15.0
     for attempt in range(MAX_RETRIES):
         try:
@@ -145,11 +158,16 @@ def _fetch_with_backoff(client: httpx.Client, lat: float, lon: float,
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code != 429:
                 raise
-            retry_after = exc.response.headers.get("retry-after")
-            wait = float(retry_after) if retry_after and retry_after.isdigit() \
-                else delay * (2 ** attempt)
-            wait = min(wait, 600.0)
-            progress(f"  rate limited, waiting {wait:.0f}s")
+            body = (exc.response.text or "").lower()
+            if "hour" in body or "daily" in body:
+                wait = _seconds_to_next_hour()
+                progress(f"  hourly budget spent - sleeping "
+                         f"{wait / 60:.1f} min until it refills")
+            else:
+                retry_after = exc.response.headers.get("retry-after")
+                wait = (float(retry_after) if retry_after and retry_after.isdigit()
+                        else min(delay * (2 ** attempt), 300.0))
+                progress(f"  rate limited, waiting {wait:.0f}s")
             time.sleep(wait)
     raise RuntimeError("gave up after repeated rate limiting")
 

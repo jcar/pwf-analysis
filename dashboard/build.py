@@ -112,6 +112,9 @@ header.top{border-bottom:1px solid var(--rule-strong); padding-block:40px 26px; 
 .kpi .v{font-family:"IBM Plex Mono",monospace; font-size:27px; font-weight:600;
   line-height:1.1; letter-spacing:-.02em}
 .kpi .k{font-size:12px; color:var(--ink-3); margin-top:5px; letter-spacing:.02em}
+.caveat{margin:14px 0 40px; padding:12px 15px; background:var(--accent-soft);
+  border-left:3px solid var(--accent); font-size:13.5px; color:var(--ink-2);
+  max-width:78ch}
 
 section{margin-bottom:48px}
 .shead{display:flex; align-items:baseline; justify-content:space-between;
@@ -207,6 +210,7 @@ footer p{margin:0 0 11px}
 </header>
 
 <div class="kpis" id="kpis"></div>
+<p class="caveat" id="caveat"></p>
 
 <section>
   <div class="shead"><h2>What the archive will tell you</h2></div>
@@ -304,6 +308,13 @@ $("#prov").innerHTML =
   `<span><b>${h.first || "?"}</b> to <b>${h.last || "?"}</b></span>` +
   `<span><b>${fmt(h.lake_known_pct, 1)}%</b> matched to a lake</span>`;
 $("#gen").textContent = "Generated " + D.generated;
+$("#caveat").innerHTML =
+  `The archive runs from <b>${h.first}</b>, but a catch <i>rate</i> needs both a fish ` +
+  `count and a half- or full-day window, and those fields only appear on reports from ` +
+  `about <b>${h.scored_from}</b> onward. Every rate on this page therefore rests on ` +
+  `<b>${h.scored.toLocaleString()}</b> trips from ${h.scored_from}–${h.scored_to}, not on all ` +
+  `${h.reports.toLocaleString()} reports. The older reports still contribute the baits ` +
+  `people threw and how they described the water.`;
 
 [["reports", h.reports.toLocaleString(), "reports read"],
  ["lakes", h.lakes, "lakes in the club"],

@@ -6,3 +6,8 @@
   rate limited, waiting 30s
   rate limited, waiting 60s
   rate limited, waiting 120s
+  rate limited, waiting 240s
+  rate limited, waiting 15s
+  rate limited, waiting 30s
+  rate limited, waiting 60s
+  hourly budget spent - sleeping 10.7 min until it refills

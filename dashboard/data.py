@@ -55,6 +55,18 @@ def collect(conn: sqlite3.Connection) -> dict:
     return out
 
 
+def _scored_window(scored) -> tuple:
+    """Catch rates need both a fish count and an AM/PM window, and both live in
+    the structured field block that only exists from about 2018. Legacy reports
+    still contribute baits and narrative detail, but no rate."""
+    if scored.empty:
+        return (None, None)
+    years = scored["year"].dropna()
+    if years.empty:
+        return (None, None)
+    return (int(years.min()), int(years.max()))
+
+
 def _headline(conn, trips, scored) -> dict:
     lakes = conn.execute(
         "SELECT COUNT(*) FROM lakes WHERE report_count > 0").fetchone()[0]
@@ -65,6 +77,8 @@ def _headline(conn, trips, scored) -> dict:
         "lakes": int(lakes),
         "scored": int(len(scored)),
         "first": d0, "last": d1,
+        "scored_from": _scored_window(scored)[0],
+        "scored_to": _scored_window(scored)[1],
         "median_fph": _num(scored["fish_per_hour"].median()),
         "best_lb": _num(trips["max_weight_lb"].max(), 1),
         "lake_known_pct": _num(100 * trips["lake_known"].mean(), 1),

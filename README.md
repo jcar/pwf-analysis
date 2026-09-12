@@ -10,7 +10,7 @@ taxonomy practical.
 
 ## What it does
 
-1. **Crawls** the public report pages once (~13k reports, 2010–2026) and caches the
+1. **Crawls** the public report pages once (13,672 reports, 2010–2026) and caches the
    raw HTML, so no later step ever needs the network again.
 2. **Parses** two page shapes: the structured reports (2019+, which *may* carry
    `Lures Used` and `Total Fish/Sizes` fields — those are optional and about 58% of
@@ -67,11 +67,19 @@ Measured across all 13,672 reports:
 | exact reservation date (58%) | depth fished (15%) |
 | weather, pressure + trend, wind, cloud — every trip with a lake and a date | water temperature (13%) |
 
-Two of those deserve emphasis. **Only 56% of reports give a countable catch**, so
-that is the real denominator for every catch-rate figure — about 7,600 trips, not
-13,672. And **the structured fields are optional**: roughly 58% of reports fill in
-`Lures Used`, which is why the narrative scan matters — together they name a bait on
-86% of trips.
+Three of those deserve emphasis.
+
+**Catch rates cover 2018–2026, not the full sixteen years.** A rate needs both a fish
+count and a half- or full-day window, and both live in the structured field block that
+only appears from about 2018. So every fish-per-hour figure rests on **7,613 trips**,
+not on all 13,672 reports. The 2010–2017 reports are not wasted — they supply baits,
+vegetation and cover descriptions, and lake profiles — but they carry no rate.
+
+**Only 56% of reports give a countable catch**, which is the same constraint seen from
+the other side, and is the real denominator behind every rate.
+
+**The structured fields are optional**: roughly 58% of reports fill in `Lures Used`,
+which is why the narrative scan matters — together they name a bait on 86% of trips.
 
 This is also why the weather join earns its place: it supplies exactly the conditions
 the narratives leave out, for every trip that has a lake and a date. `pwf coverage`
@@ -84,6 +92,10 @@ Observational data with real confounds. Popular baits get thrown more, and under
 different conditions, than rare ones. Better anglers write more reports. Only ~3% of
 reports admit a blank day, which is not a believable rate — the archive is
 survivorship-biased toward good days. Everything here is association, not cause.
+
+Weather backfill is rate-limited by Open-Meteo's free tier, which meters by request
+weight; a full backfill takes more than one hourly budget. `pwf enrich` is resumable
+and waits for the bucket to refill, so re-running it simply continues.
 
 ## Layout
 
