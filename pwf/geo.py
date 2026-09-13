@@ -347,9 +347,13 @@ def resolve_by_sibling(conn: sqlite3.Connection) -> list[dict]:
 
     pinned = verified_towns(conn)
     fixed = []
+    # Also covers lakes with no coordinate at all, not only ambiguous ones: a
+    # lake the club never gave a town, but which sits on a ranch whose other
+    # lakes are placed, is settled by exactly the same evidence.
     for r in conn.execute(
             "SELECT lake_id, name, town, lat, lon, report_count FROM lakes"
-            " WHERE geo_uncertain=1 ORDER BY report_count DESC").fetchall():
+            " WHERE geo_uncertain=1 OR lat IS NULL"
+            " ORDER BY report_count DESC").fetchall():
         key = (r["town"] or "").strip().lower()
         if key not in pinned:
             continue

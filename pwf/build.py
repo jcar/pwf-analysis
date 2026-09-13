@@ -24,12 +24,34 @@ _SEASONS = {12: "winter", 1: "winter", 2: "winter", 3: "spring", 4: "spring",
             9: "fall", 10: "fall", 11: "fall"}
 
 
+@lru_cache(maxsize=1)
+def _aliases() -> dict[str, str]:
+    """Report-page spellings folded onto the club's own listing name.
+
+    A property page and a report page do not always spell a lake the same way,
+    and keying lakes on the exact string split one lake into two rows - Tara
+    Lake and "Tara lake", 174 reports and 40 - so each half was ranked on part
+    of its own history and shrunk toward the club mean as if it were sparse.
+
+    Kept as committed data rather than a rule, because no rule can tell the
+    difference between a spelling and a second property of the same name: the
+    club has two lakes called "Twin Lakes" and two called "Moonshine Lake".
+    """
+    path = DATA / "lake_aliases.json"
+    if not path.exists():
+        return {}
+    try:
+        return dict(json.loads(path.read_text()).get("aliases") or {})
+    except (OSError, ValueError):
+        return {}
+
+
 def _norm_lake(name: str | None) -> str | None:
     if not name:
         return None
     n = re.sub(r"\s+", " ", name).strip(" .,-")
     n = re.sub(r"\s*:\s*", ": ", n)
-    return n or None
+    return _aliases().get(n, n) or None
 
 
 def build_index(conn: sqlite3.Connection) -> int:
@@ -103,6 +125,22 @@ def build_lakes(conn: sqlite3.Connection) -> int:
     for (name,) in conn.execute(
             "SELECT property_name FROM reports WHERE property_name IS NOT NULL"):
         bump(name)
+
+    # Fold names that differ only by case, keeping the spelling seen most often.
+    # "Tara Lake" and "Tara lake" were two rows holding 174 and 40 reports of one
+    # lake; the alias file catches the ones already known, this stops new ones.
+    folded: dict[str, dict] = {}
+    for name, e in counts.items():
+        key = name.casefold()
+        cur = folded.get(key)
+        if cur is None:
+            folded[key] = {"name": name, **e}
+        else:
+            cur["n"] += e["n"]
+            cur["town"] = cur["town"] or e["town"]
+            if e["n"] > counts[cur["name"]]["n"]:
+                cur["name"] = name
+    counts = {v["name"]: {"town": v["town"], "n": v["n"]} for v in folded.values()}
 
     for name, e in counts.items():
         conn.execute(
@@ -224,23 +262,33 @@ def lake_variant_map(conn: sqlite3.Connection) -> dict[str, list[str]]:
 
 
 @lru_cache(maxsize=1)
-def _site_slugs() -> dict[str, str]:
+def _site_slugs() -> dict[str, tuple[str, ...]]:
     """Authoritative name -> slug pairs harvested from the site's own property
     listing endpoint. The site's slugs are not always derivable from the name
     ("Beaver Lake: Heartland 10-10 Ranch" is `heartland_beaver_2`), so these
-    win over anything guessed."""
+    win over anything guessed.
+
+    A display name is not unique: the club runs two properties called "Twin
+    Lakes", one at Cody Ranch in Coalgate, Oklahoma and one in Ben Wheeler,
+    Texas. Inverting the file into a plain name -> slug dict silently kept
+    whichever came last and dropped the other, so every value is a tuple.
+    """
     path = DATA / "site_slugs.json"
     if not path.exists():
         return {}
     raw = json.loads(path.read_text())
-    return {re.sub(r"[^a-z0-9]", "", v.lower()): k for k, v in raw.items()}
+    out: dict[str, list[str]] = {}
+    for slug, name in raw.items():
+        out.setdefault(re.sub(r"[^a-z0-9]", "", name.lower()), []).append(slug)
+    return {k: tuple(v) for k, v in out.items()}
 
 
 def _slug_variants(name: str) -> list[str]:
     """The site is inconsistent, so try a few plausible spellings."""
-    known = _site_slugs().get(re.sub(r"[^a-z0-9]", "", name.lower()))
+    known = list(_site_slugs().get(re.sub(r"[^a-z0-9]", "", name.lower()), ()))
     base = slugify(name)
-    variants = [known, base] if known else [base]
+    # Prefer a slug the club itself published, then the guess.
+    variants = known + [base] if known else [base]
     # "Dogwood Lakes Estate: East Lake" also appears as just its second half.
     if ":" in name:
         tail = slugify(name.split(":", 1)[1])
@@ -267,10 +315,23 @@ def build_lake_details(conn: sqlite3.Connection) -> dict:
         stats["pages"] += 1
 
         target = None
+        # Exact match only. An earlier `slug in slugify(cand)` let a short slug
+        # claim a longer, differently-named lake: the Ben Wheeler page at
+        # `twin_lakes` matched "Cody Ranch Twin Lakes" and stamped its slug,
+        # acreage and day rate onto a property 200 miles away in Coalgate,
+        # Oklahoma - which then looked like proof the two were one lake.
         for cand in names:
-            if slugify(cand) == slug or slug in slugify(cand):
+            if slugify(cand) == slug:
                 target = names[cand]
                 break
+        if target is None:
+            # The club's own listing knows slugs that are not derivable from
+            # the name, so consult it rather than guessing at substrings.
+            for cand in names:
+                key = re.sub(r"[^a-z0-9]", "", cand)
+                if slug in _site_slugs().get(key, ()):
+                    target = names[cand]
+                    break
         if target is None and info.get("name"):
             # Property pages title themselves "Town, Lake Name".
             tail = info["name"].split(",")[-1].strip().lower()
@@ -293,3 +354,43 @@ def build_lake_details(conn: sqlite3.Connection) -> dict:
         stats["matched"] += 1
     conn.commit()
     return stats
+
+
+def merge_alias_rows(conn: sqlite3.Connection) -> list[dict]:
+    """Fold already-stored variant rows onto their canonical lake.
+
+    A rebuild would produce the right rows from scratch, but the database
+    carries hand-settled coordinates and a weather backfill that cost a day of
+    API budget, so the split is repaired in place instead.
+    """
+    merged = []
+    for variant, canonical in _aliases().items():
+        v = conn.execute("SELECT lake_id, report_count FROM lakes WHERE name=?",
+                         (variant,)).fetchone()
+        c = conn.execute("SELECT lake_id, report_count FROM lakes WHERE name=?",
+                         (canonical,)).fetchone()
+        if not v or not c or v["lake_id"] == c["lake_id"]:
+            continue
+        moved = conn.execute("SELECT COUNT(*) n FROM trips WHERE lake_id=?",
+                             (v["lake_id"],)).fetchone()["n"]
+        conn.execute("UPDATE trips SET lake_id=? WHERE lake_id=?",
+                     (c["lake_id"], v["lake_id"]))
+        # Conditions are one row per lake-day; keep the canonical lake's.
+        conn.execute(
+            "INSERT OR IGNORE INTO conditions"
+            " SELECT ? AS lake_id, date, temp_max_f, temp_min_f, temp_mean_f,"
+            "  temp_7d_mean_f, precip_in, wind_max_mph, wind_dir_deg, cloud_pct,"
+            "  pressure_hpa, pressure_delta_24h, pressure_delta_48h,"
+            "  pressure_trend, moon_phase, moon_illum, sunrise, sunset,"
+            "  day_length_h FROM conditions WHERE lake_id=?",
+            (c["lake_id"], v["lake_id"]))
+        conn.execute("DELETE FROM conditions WHERE lake_id=?", (v["lake_id"],))
+        conn.execute("DELETE FROM lakes WHERE lake_id=?", (v["lake_id"],))
+        total = conn.execute("SELECT COUNT(*) n FROM trips WHERE lake_id=?",
+                             (c["lake_id"],)).fetchone()["n"]
+        conn.execute("UPDATE lakes SET report_count=? WHERE lake_id=?",
+                     (total, c["lake_id"]))
+        merged.append({"variant": variant, "canonical": canonical,
+                       "trips_moved": moved, "canonical_trips": total})
+    conn.commit()
+    return merged

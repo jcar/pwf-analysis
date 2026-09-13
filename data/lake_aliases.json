@@ -1,0 +1,26 @@
+{
+  "_comment": [
+    "Report pages spell a property differently from the club's own listing, which",
+    "split one lake across two rows and halved its history. The canonical name is",
+    "always the one the club lists (it has a listing slug and a town); each variant",
+    "below has neither and appears only in a report page's property field.",
+    "",
+    "Two look like aliases and are NOT. The club runs two properties called 'Twin",
+    "Lakes' - one at Cody Ranch in Coalgate, Oklahoma, one in Ben Wheeler, Texas -",
+    "and 'Moonshine Lake' likewise exists at Cody Ranch and at Walnut Springs.",
+    "Merging either pair would fuse lakes 200 miles apart."
+  ],
+  "aliases": {
+    "Heartbrand Ranch": "Waelder Heartbrand Ranch",
+    "Cody Ranch The Lodge": "The Lodge",
+    "Cody Ranch Hart Lakes": "Hart Lakes",
+    "Cody Ranch Peach Creek and Crabgrass Lakes": "Peach Creek and Crabgrass Lakes",
+    "Nix Ranch Lake TCU": "Nix Ranch: Lake TCU",
+    "Tara lake": "Tara Lake",
+    "Travis Lake - (Formerly Flying M)": "Travis Lake"
+  },
+  "distinct": {
+    "Cody Ranch Twin Lakes": "not Twin Lakes (Ben Wheeler) - Cody Ranch is Coalgate, OK",
+    "Cody Ranch: Moonshine Lake": "not Moonshine Lake (Walnut Springs, TX)"
+  }
+}
