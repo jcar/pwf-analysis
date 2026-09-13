@@ -21,12 +21,15 @@ from __future__ import annotations
 import sqlite3
 from datetime import date, timedelta
 
+import json
+import time
+
 import httpx
 import numpy as np
 import pandas as pd
 
 from . import analysis as A
-from .config import USER_AGENT
+from .config import USER_AGENT, DATA
 from .profile import confidence, miles_from_home
 from .weather import DAILY, UNITS, grid_key
 
@@ -55,11 +58,46 @@ CONDITION_MULTIPLIERS = {
 }
 
 
-def fetch_forecast(cells: list[tuple[float, float]]) -> dict[tuple, dict[str, dict]]:
+FORECAST_CACHE = DATA / "forecast_cache.json"
+# A forecast for a day still six days out does not move much in an hour, and
+# Open-Meteo's free tier meters by request weight - a weather backfill can eat
+# the budget and leave the page with no conditions at all. So the last good
+# answer is kept and reused when the live call fails.
+FORECAST_CACHE_HOURS = 12
+
+
+def _load_forecast_cache() -> dict:
+    try:
+        raw = json.loads(FORECAST_CACHE.read_text())
+    except (OSError, ValueError):
+        return {}
+    age = time.time() - raw.get("fetched_at", 0)
+    if age > FORECAST_CACHE_HOURS * 3600:
+        return {}
+    return {tuple(json.loads(k)): v for k, v in (raw.get("cells") or {}).items()}
+
+
+def _save_forecast_cache(out: dict) -> None:
+    try:
+        FORECAST_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        FORECAST_CACHE.write_text(json.dumps({
+            "fetched_at": time.time(),
+            "cells": {json.dumps(list(k)): v for k, v in out.items()},
+        }))
+    except OSError:
+        pass
+
+
+def fetch_forecast(cells: list[tuple[float, float]],
+                   allow_stale: bool = False) -> dict[tuple, dict[str, dict]]:
     """Forecast for every lake grid cell in a single request.
 
     Open-Meteo takes comma-separated coordinate lists and returns one block per
     location, so the whole club costs one call rather than ninety.
+
+    With `allow_stale`, a rate-limited call falls back to the last good answer
+    rather than returning nothing - a slightly old forecast beats a brief with
+    no conditions in it. The caller is told which it got.
     """
     if not cells:
         return {}
@@ -69,9 +107,15 @@ def fetch_forecast(cells: list[tuple[float, float]]) -> dict[tuple, dict[str, di
         "daily": DAILY, **UNITS,
         "forecast_days": 16, "past_days": 2,
     }
-    r = httpx.get(FORECAST, params=params,
-                  headers={"User-Agent": USER_AGENT}, timeout=90)
-    r.raise_for_status()
+    try:
+        r = httpx.get(FORECAST, params=params,
+                      headers={"User-Agent": USER_AGENT}, timeout=90)
+        r.raise_for_status()
+    except Exception:
+        if not allow_stale:
+            raise
+        cached = _load_forecast_cache()
+        return {c: cached[c] for c in cells if c in cached}
     payload = r.json()
     blocks = payload if isinstance(payload, list) else [payload]
 
@@ -96,8 +140,8 @@ def fetch_forecast(cells: list[tuple[float, float]]) -> dict[tuple, dict[str, di
                                        if p is not None and p24 is not None else None),
             }
         out[cell] = by_date
+    _save_forecast_cache(out)
     return out
-
 
 def _at(daily, key, i):
     vals = daily.get(key)

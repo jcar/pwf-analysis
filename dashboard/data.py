@@ -317,7 +317,9 @@ def _planner(conn, trips, lures) -> dict:
     forecasts = {}
     try:
         cells = sorted({grid_key(lk["lat"], lk["lon"]) for lk in all_lakes})
-        forecasts = fetch_forecast(cells)
+        # A rate-limited fetch falls back to the last good forecast rather than
+        # shipping briefs with no conditions at all.
+        forecasts = fetch_forecast(cells, allow_stale=True)
     except Exception:
         forecasts = {}
 
