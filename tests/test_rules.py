@@ -219,3 +219,45 @@ class TestBagWeights:
         from pwf.rules.fish import MAX_SINGLE_FISH_LB
         assert MAX_SINGLE_FISH_LB <= 18.2
         assert parse_total_fish("one fish 24 lb")["max_weight_lb"] is None
+
+
+class TestColourBaitPrecedence:
+    """Several words are both a colour and a bait - craw, shad, yellow. Taking
+    the colour first destroyed the bait: "Rage Craw" became "rage" and matched
+    nothing at all. Baits are matched first; colours come from the remainder."""
+
+    @pytest.mark.parametrize("raw,expected", [
+        ("Rage Craw", ("soft_plastic", "craw")),
+        ("TX-rigged craw", ("soft_plastic", "craw")),
+        ("Yellow Magic", ("topwater", "popper")),
+        ('Berkley Swim Shad 3" Soft Baits', ("soft_plastic", "swimbait_soft")),
+    ])
+    def test_bait_wins_over_colour(self, raw, expected):
+        assert expected in cats(raw)
+
+    def test_colour_still_read_from_the_remainder(self):
+        res = parse_lures("green pumpkin craw")
+        assert (res.hits[0].category, res.hits[0].subtype) == ("soft_plastic", "craw")
+        assert res.hits[0].color == "green pumpkin"
+
+    def test_colour_only_part_keeps_its_colour(self):
+        res = parse_lures("soft plastics shad color")
+        assert res.hits[0].color == "shad"
+        assert res.hits[0].category == "soft_plastic"
+
+    @pytest.mark.parametrize("raw,expected", [
+        ("Shadow Rap", ("jerkbait", "jerkbait")),
+        ("Choppo", ("topwater", "prop")),
+        ("beetle spin", ("spinnerbait", "inline")),
+        ("Sqbill", ("crankbait", "squarebill")),
+        ("RatLTrap", ("lipless", "lipless")),
+        ("dark sleeper", ("soft_plastic", "swimbait_soft")),
+        ("TRW", ("soft_plastic", "worm")),
+    ])
+    def test_terms_added_from_the_review_queue(self, raw, expected):
+        assert expected in cats(raw)
+
+    @pytest.mark.parametrize("raw", ["0", "50", "1"])
+    def test_bare_numbers_are_filler_not_unknown(self, raw):
+        res = parse_lures(raw)
+        assert res.ambiguous and not res.unknown

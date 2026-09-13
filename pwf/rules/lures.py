@@ -90,7 +90,14 @@ def split_parts(raw: str) -> list[str]:
 
 
 def parse_lures(raw: str | None, source: str = "field") -> LureResult:
-    """Parse a 'Lures Used' field (or a narrative sentence) into hits."""
+    """Parse a 'Lures Used' field (or a narrative sentence) into hits.
+
+    Bait terms are matched *before* colours are stripped. Several words are both
+    ("craw", "shad", "yellow"), and taking the colour first destroyed the bait:
+    "Rage Craw" became "rage" and "Yellow Magic" became "magic", each matching
+    nothing. A bait name is the more specific reading, so it wins; whatever
+    survives is then searched for a colour.
+    """
     res = LureResult()
     if not raw:
         return res
@@ -100,44 +107,49 @@ def parse_lures(raw: str | None, source: str = "field") -> LureResult:
         text = normalize(part)
         if not text:
             continue
-        if text in tax["ambiguous"]:
+        # A bare number ("0", "50") names no bait; it is filler, not a term the
+        # taxonomy is missing.
+        if text in tax["ambiguous"] or text.isdigit():
             res.ambiguous.append(part.strip())
             continue
 
-        color = None
-        for name, rx in tax["colors"]:
-            m = rx.search(text)
-            if m:
-                color = name
-                text = (text[: m.start()] + " " + text[m.end():]).strip()
-                break
-
+        # 1. rigs and presentations
+        implied = None
         for _p, rx, name, implies in tax["techniques"]:
             if rx.search(text):
                 if name not in res.techniques:
                     res.techniques.append(name)
                 text = rx.sub(" ", text).strip()
-                if implies and not any(
-                    r.search(text) for _q, r, _c, _s in tax["terms"]
-                ):
-                    res.hits.append(LureHit(part.strip(), implies, "unspecified", color))
-                    color = None
+                implied = implied or implies
 
-        found = False
+        # 2. bait terms, longest surface form first
+        found: list[LureHit] = []
         consumed = text
         for _p, rx, cat, sub in tax["terms"]:
             m = rx.search(consumed)
             if not m:
                 continue
-            res.hits.append(LureHit(part.strip(), cat, sub, color))
+            found.append(LureHit(part.strip(), cat, sub, None))
             consumed = (consumed[: m.start()] + " " + consumed[m.end():]).strip()
-            found = True
-            color = None
+
+        # 3. colour, from whatever the bait terms did not consume
+        color = None
+        haystack = consumed if found else text
+        for name, rx in tax["colors"]:
+            if rx.search(haystack):
+                color = name
+                consumed = rx.sub(" ", consumed).strip()
+                break
+        for h in found:
+            h.color = color
+        res.hits.extend(found)
 
         if not found:
+            if implied:
+                res.hits.append(LureHit(part.strip(), implied, "unspecified", color))
+                continue
             leftover = _WS.sub(" ", consumed).strip()
             if not leftover:
-                # The whole part was a colour or a rig - already recorded.
                 if color:
                     res.hits.append(LureHit(part.strip(), None, None, color))
             elif leftover in tax["ambiguous"]:

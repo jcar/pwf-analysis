@@ -19,6 +19,7 @@ colors:
   - june bug
   - morning dawn
   - sexy shad
+  - red shad
   - table rock
   - okeechobee craw
   - chartreuse
@@ -26,8 +27,6 @@ colors:
   - bream
   - perch
   - shad
-  - craw
-  - crawfish
   - pumpkin
   - natural
   - white
@@ -66,11 +65,11 @@ techniques:
 # compound names must precede the generic term they contain.
 terms:
   # --- topwater -----------------------------------------------------------
-  - {match: [whopper plopper, plopper, ploppers], category: topwater, subtype: prop}
+  - {match: [whopper plopper, plopper, ploppers, choppo, tiny torpedo, torpedo], category: topwater, subtype: prop}
   - {match: [hollow body frog, hollow-body frog, frog, frogs, froggin], category: topwater, subtype: frog}
   - {match: [horny toad, toad, ribbit], category: topwater, subtype: soft_toad}
   - {match: [buzzbait, buzz bait, buzzbaits, buzz baits, buzzer], category: topwater, subtype: buzzbait}
-  - {match: [popper, poppers, pop r, pop-r, chug bug, chugger], category: topwater, subtype: popper}
+  - {match: [popper, poppers, pop r, pop-r, chug bug, chugger, yellow magic], category: topwater, subtype: popper}
   - {match: [zara spook, spook, walking bait, walk the dog, sammy, gunfish], category: topwater, subtype: walker}
   - {match: [wake bait, wakebait], category: topwater, subtype: wakebait}
   - {match: [topwater, top water, top-water, surface lure], category: topwater, subtype: unspecified}
@@ -79,15 +78,15 @@ terms:
   - {match: [chatterbait, chatter bait, chatterbaits, chatter baits, chatter, bladed jig, vibrating jig, jack hammer, jackhammer], category: bladed_jig, subtype: bladed_jig}
   - {match: [underspin, under spin, underspins, scrounger], category: underspin, subtype: underspin}
   - {match: [spinnerbait, spinner bait, spinnerbaits, spinner baits, spinner, spinners, willow leaf, colorado blade], category: spinnerbait, subtype: spinnerbait}
-  - {match: [inline spinner, rooster tail, roostertail, mepps], category: spinnerbait, subtype: inline}
+  - {match: [inline spinner, rooster tail, roostertail, mepps, beetle spin, beetlespin, beetle], category: spinnerbait, subtype: inline}
 
   # --- hard baits ---------------------------------------------------------
-  - {match: [lipless crankbait, lipless crank, lipless, rattle trap, rat-l-trap, rattletrap, red eye shad, tiny trap, trap], category: lipless, subtype: lipless}
-  - {match: [square bill, squarebill, square-bill, kvd 1.5, 1.5 crank], category: crankbait, subtype: squarebill}
+  - {match: [lipless crankbait, lipless crank, lipless, rattle trap, rat-l-trap, rattletrap, ratltrap, rattle bait, rattlebait, red eye shad, tiny trap, trap], category: lipless, subtype: lipless}
+  - {match: [square bill, squarebill, square-bill, sqbill, sq bill, kvd 1.5, 1.5 crank], category: crankbait, subtype: squarebill}
   - {match: [deep diving crankbait, deep crank, deep diver, dd22, 6xd, 10xd], category: crankbait, subtype: deep}
   - {match: [medium diving crank, mid depth crank], category: crankbait, subtype: medium}
   - {match: [crankbait, crank bait, crankbaits, crank baits, cranks, crankin, crank], category: crankbait, subtype: unspecified}
-  - {match: [jerkbait, jerk bait, jerkbaits, jerk baits, rogue, x-rap, xrap, pointer, husky jerk], category: jerkbait, subtype: jerkbait}
+  - {match: [jerkbait, jerk bait, jerkbaits, jerk baits, shadow rap, rogue, x-rap, xrap, pointer, husky jerk, jerk], category: jerkbait, subtype: jerkbait}
   - {match: [glide bait, glidebait, s-waver, swaver, hard swimbait, bull shad], category: swimbait, subtype: glide}
   - {match: [rapala, minnow bait, countdown], category: jerkbait, subtype: minnow}
   - {match: [spoon, spoons, johnson silver minnow, flutter spoon], category: spoon, subtype: spoon}
@@ -103,13 +102,13 @@ terms:
   - {match: [jig, jigs, jigging], category: jig, subtype: unspecified}
 
   # --- soft plastics ------------------------------------------------------
-  - {match: [paddle tail swimbait, paddle tail, paddletail, zako, zakos, keitech, swing impact, boot tail], category: soft_plastic, subtype: swimbait_soft}
+  - {match: [paddle tail swimbait, paddle tail, paddletail, zako, zakos, keitech, swing impact, boot tail, swim shad, dark sleeper, searchbait, 360gt], category: soft_plastic, subtype: swimbait_soft}
   - {match: [swimbait, swim bait, swimbaits, swim baits, swimmer], category: soft_plastic, subtype: swimbait_soft}
-  - {match: [senko, senkos, senco, sencos, sinko, sinkos, trick stick, yum dinger, dinger, ocho, stick bait, stickbait, stick worm], category: soft_plastic, subtype: stickbait}
+  - {match: [senko, senkos, senco, sencos, sinko, sinkos, trick stick, general, generals, yum dinger, dinger, ocho, stick bait, stickbait, stick worm], category: soft_plastic, subtype: stickbait}
   - {match: [slug go, slug-go, slugo, fluke, flukes, jerk worm, soft jerkbait, super fluke], category: soft_plastic, subtype: fluke}
   - {match: [brush hog, brushhog, biffle bug, bifflebug, beaver, rage bug, creature bait, creature baits, creature, sweet beaver, d bomb], category: soft_plastic, subtype: creature}
-  - {match: [trick worm, power worm, ribbon tail, ribbontail, curly tail worm, straight tail worm, finesse worm, plastic worm, plastic worms, worm, worms, nightcrawler plastic], category: soft_plastic, subtype: worm}
-  - {match: [rage craw, craw worm, crawdad, chunk trailer, crawfish trailer, craw trailer, rage tail], category: soft_plastic, subtype: craw}
+  - {match: [trick worm, power worm, ribbon tail, ribbontail, curly tail worm, straight tail worm, finesse worm, plastic worm, plastic worms, trw, worm, worms, nightcrawler plastic], category: soft_plastic, subtype: worm}
+  - {match: [rage craw, craw worm, crawdad, crawfish, chunk trailer, crawfish trailer, craw trailer, rage tail, craw], category: soft_plastic, subtype: craw}
   - {match: [lizard, lizards, salamander, salamanders], category: soft_plastic, subtype: lizard}
   - {match: [tube bait, tubes, tube], category: soft_plastic, subtype: tube}
   - {match: [curly tail grub, grub, grubs], category: soft_plastic, subtype: grub}
@@ -152,5 +151,10 @@ ambiguous:
   - nothing
   - unknown
   - mostly
+  - all
+  - a bit of everything
+  - everything under the sun
+  - see below
+  - etc.
   - mainly
   - some
