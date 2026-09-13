@@ -162,6 +162,17 @@ CREATE TABLE IF NOT EXISTS conditions (
     PRIMARY KEY (lake_id, date)
 );
 
+-- Constants measured from the data rather than assumed. Effort hours per
+-- booking slot live here: all-day anglers do not fish twice as hard as
+-- half-day anglers, and assuming they do penalises all-day lakes.
+CREATE TABLE IF NOT EXISTS calibration (
+    key         TEXT PRIMARY KEY,
+    value       REAL,
+    n           INTEGER,
+    note        TEXT,
+    computed_at TEXT
+);
+
 -- Every rule-based extractor records what fraction of reports it fired on, so
 -- the CLI can always state the sample behind a number.
 CREATE TABLE IF NOT EXISTS coverage_stats (

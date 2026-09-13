@@ -11,7 +11,7 @@ import sqlite3
 from datetime import date, datetime, timedelta
 from functools import lru_cache
 
-from .config import DATA, HOURS_BY_SLOT
+from .config import DATA
 from .crawl import iter_cached
 from .parse_index import parse as parse_index
 from .parse_report import parse as parse_report
@@ -117,7 +117,10 @@ def build_lakes(conn: sqlite3.Connection) -> int:
 
 def build_trips(conn: sqlite3.Connection) -> dict:
     """Resolve each report to a lake, a date and an effort window."""
+    from .analysis import calibrate_effort, effort_hours
     from .rules.fish import parse_total_fish
+
+    hours_by_slot = effort_hours(conn)
 
     conn.execute("DELETE FROM trips")
     lake_ids = {r["name"]: r["lake_id"] for r in conn.execute(
@@ -156,7 +159,7 @@ def build_trips(conn: sqlite3.Connection) -> dict:
                     trip_date, src = posted, "posted_estimate"
 
         fish = parse_total_fish(r["total_fish_raw"])
-        hours = HOURS_BY_SLOT.get(r["time_slot"] or "", None)
+        hours = hours_by_slot.get(r["time_slot"] or "", None)
         fph = (fish["total"] / hours) if (fish["total"] is not None and hours) else None
 
         y = m = season = None
@@ -187,6 +190,22 @@ def build_trips(conn: sqlite3.Connection) -> dict:
         ":month,:season,:time_slot,:trip_date_source,:hours,:fish_total,"
         ":fish_per_hour,:max_weight_lb)", batch)
     conn.commit()
+
+    # Now that every trip's slot and catch is known, measure the real effort
+    # ratio and restate the rates in place. Doing it after the insert lets a
+    # fresh database converge in one pass instead of needing a second build.
+    cal = calibrate_effort(conn)
+    measured = effort_hours(conn)
+    if measured != hours_by_slot:
+        for slot, hrs in measured.items():
+            conn.execute(
+                "UPDATE trips SET hours=?,"
+                " fish_per_hour = CASE WHEN fish_total IS NULL THEN NULL"
+                "                      ELSE fish_total / ? END"
+                " WHERE time_slot=?", (hrs, hrs, slot))
+        conn.commit()
+    stats["all_day_hours"] = measured["ALL_DAY"]
+    stats["effort_source"] = cal["source"]
     return stats
 
 

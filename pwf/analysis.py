@@ -15,13 +15,79 @@ from __future__ import annotations
 
 import sqlite3
 
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
+
+from .config import HALF_DAY_HOURS, HOURS_BY_SLOT
 
 # Strength of the prior pulling a small cell toward the segment mean, measured
 # in equivalent trips.
 SHRINK_K = 8.0
 MIN_CELL = 3
+
+
+def calibrate_effort(conn: sqlite3.Connection) -> dict:
+    """Measure hours per booking slot instead of assuming them.
+
+    The naive assumption is that an all-day trip is twice a half-day trip. It is
+    not: measured across thousands of trips, all-day anglers catch roughly 1.4x
+    what half-day anglers catch, not 2x. Dividing their fish by eight hours
+    therefore understates them by about a quarter - and because booking mix
+    varies enormously by lake (some properties are booked all-day almost
+    exclusively, others hardly at all), that error does not wash out. It biases
+    every comparison *between* lakes, which is exactly what a recommender ranks.
+
+    So the all-day figure is derived: half-day hours stay the club's own
+    definition, and all-day hours are scaled by the observed catch ratio.
+    """
+    df = pd.read_sql_query(
+        "SELECT time_slot, fish_total FROM trips"
+        " WHERE fish_total IS NOT NULL AND time_slot IS NOT NULL", conn)
+    out = {"AM": HALF_DAY_HOURS, "PM": HALF_DAY_HOURS,
+           "ALL_DAY": HOURS_BY_SLOT["ALL_DAY"]}
+    stats = {"hours": out, "ratio": None, "n_all_day": 0, "n_half": 0,
+             "source": "fallback"}
+    if df.empty:
+        return stats
+
+    half = df[df["time_slot"].isin(("AM", "PM"))]["fish_total"]
+    allday = df[df["time_slot"] == "ALL_DAY"]["fish_total"]
+    stats["n_half"], stats["n_all_day"] = len(half), len(allday)
+    # Too few trips to measure anything - keep the documented fallback.
+    if len(half) < 100 or len(allday) < 100 or half.mean() <= 0:
+        return stats
+
+    ratio = float(allday.mean() / half.mean())
+    # A ratio outside this range means something is wrong with the data, not
+    # that anglers behave strangely; refuse it rather than propagate it.
+    if not 1.0 <= ratio <= 2.0:
+        return stats
+
+    out["ALL_DAY"] = round(HALF_DAY_HOURS * ratio, 2)
+    stats.update(ratio=round(ratio, 4), source="measured")
+
+    conn.execute(
+        "INSERT OR REPLACE INTO calibration (key, value, n, note, computed_at)"
+        " VALUES (?,?,?,?,?)",
+        ("all_day_hours", out["ALL_DAY"], len(allday),
+         f"all-day trips average {allday.mean():.1f} fish vs {half.mean():.1f} "
+         f"for half-day ({ratio:.2f}x), so all-day effort is "
+         f"{HALF_DAY_HOURS} x {ratio:.2f} hours, not {HALF_DAY_HOURS * 2}",
+         datetime.now().isoformat(timespec="seconds")))
+    conn.commit()
+    return stats
+
+
+def effort_hours(conn: sqlite3.Connection) -> dict:
+    """Hours per slot: the measured value when one exists, else the fallback."""
+    hours = dict(HOURS_BY_SLOT)
+    row = conn.execute(
+        "SELECT value FROM calibration WHERE key='all_day_hours'").fetchone()
+    if row and row[0]:
+        hours["ALL_DAY"] = float(row[0])
+    return hours
 
 
 def trips_frame(conn: sqlite3.Connection) -> pd.DataFrame:

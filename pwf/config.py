@@ -29,4 +29,10 @@ MISSING_MARKERS = ("A PHP Error was encountered", "Attempt to read property")
 MISSING_MAX_BYTES = 12000
 
 INDEX_PAGE_SIZE = 12
+# Fallback effort hours per booking slot, used only until `pwf build` measures
+# the real ratio. A naive ALL_DAY of 8.0 assumes all-day anglers fish twice as
+# hard as half-day ones; measured, they catch about 1.4x as many fish, so the
+# assumption penalises all-day trips by roughly a quarter and drags down every
+# lake people mostly book all day. See analysis.calibrate_effort.
 HOURS_BY_SLOT = {"AM": 4.0, "PM": 4.0, "ALL_DAY": 8.0}
+HALF_DAY_HOURS = 4.0
