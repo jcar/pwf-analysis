@@ -224,3 +224,99 @@ class TestEstimatorExtraction:
         assert diff == pytest.approx(float((w * d).sum() / w.sum()))
         assert se == pytest.approx(float(np.sqrt(1 / w.sum())))
         assert n == len(used)
+
+
+class TestYearStability:
+    """The same filter techniques use, applied to baits.
+
+    It matters less here - on the whole archive only one club-wide verdict
+    changes, where two techniques flipped - and the important part is where it
+    deliberately does *not* apply.
+    """
+
+    def _live(self):
+        if not DB_PATH.exists():
+            pytest.skip("no database")
+        conn = init(DB_PATH)
+        return conn, A.trips_frame(conn), A.lures_frame(conn)
+
+    def test_club_stability_finds_the_erratic_baits(self):
+        from pwf.baits import club_stability
+        _c, trips, lures = self._live()
+        st = club_stability(trips, lures)
+        assert st, "no club stability computed"
+        unstable = {k for k, v in st.items() if v["stable"] is False}
+        assert unstable, "the check found nothing - it is doing no work"
+        for bait in unstable:
+            v = st[bait]
+            assert v["agreeing"] / v["years"] < 2 / 3
+
+    def test_club_instability_never_changes_a_lake_verdict(self):
+        """A bait that cannot hold its sign across ninety lakes is not thereby
+        wrong about one of them. The club verdict is a caveat, not a demotion -
+        folding it in would erase real local evidence."""
+        from pwf.baits import bait_evidence, club_stability
+        _c, trips, lures = self._live()
+        st = club_stability(trips, lures)
+        for lake in trips[trips.lake_known == 1]["lake"].value_counts().index[:25]:
+            sel = trips[trips["lake"] == lake]
+            ml = lures[lures["report_id"].isin(sel["report_id"])]
+            plain = {e["bait"]: e["support"] for e in bait_evidence(sel, ml)}
+            withst = bait_evidence(sel, ml, stability=st)
+            for e in withst:
+                assert e["support"] == plain[e["bait"]], (
+                    f"{lake}/{e['bait']} changed verdict on club-wide grounds")
+
+    def test_the_caveat_is_carried_instead(self):
+        from pwf.baits import bait_evidence, club_stability
+        _c, trips, lures = self._live()
+        st = club_stability(trips, lures)
+        unstable = {k for k, v in st.items() if v["stable"] is False}
+        if not unstable:
+            pytest.skip("nothing unstable club-wide")
+        seen = 0
+        for lake in trips[trips.lake_known == 1]["lake"].value_counts().index[:25]:
+            sel = trips[trips["lake"] == lake]
+            ml = lures[lures["report_id"].isin(sel["report_id"])]
+            for e in bait_evidence(sel, ml, stability=st):
+                if e["bait"] in unstable:
+                    assert e["club_unstable"] is True
+                    seen += 1
+                else:
+                    assert e["club_unstable"] is False
+        assert seen, "no flagged rows found"
+
+    def test_a_lake_with_its_own_year_record_can_still_demote_itself(self):
+        """Local evidence outranks the club caveat in both directions."""
+        import numpy as np
+        import pandas as pd
+
+        from pwf.baits import bait_evidence
+        rng = np.random.default_rng(9)
+        rows, pairs = [], []
+        rid = 0
+        # Strongly positive in five years, negative in three. The pooled effect
+        # clears zero, so without the year check it reads as backed - which is
+        # exactly the failure mode the check exists to catch.
+        bad_years = {2020, 2023, 2026}
+        for year in range(2019, 2027):
+            for i in range(40):
+                uses = i % 2 == 0
+                if not uses:
+                    base = 4.0
+                elif year in bad_years:
+                    base = 2.5
+                else:
+                    base = 6.5
+                rows.append({"report_id": rid, "fish_per_hour": rng.normal(base, .5),
+                             "year": year, "month": 5, "season": "spring"})
+                pairs.append({"report_id": rid, "category":
+                              "flipflop" if uses else "steady",
+                              "subtype": "x", "color": None, "source": "field"})
+                rid += 1
+        ev = {e["bait"]: e for e in bait_evidence(
+            pd.DataFrame(rows), pd.DataFrame(pairs))}
+        ff = ev.get("flipflop")
+        assert ff is not None
+        assert ff["years"] >= 3, "the local year check should have run"
+        assert ff["support"] == "unstable", ff["support"]

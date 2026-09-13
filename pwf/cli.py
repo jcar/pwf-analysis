@@ -160,14 +160,23 @@ def _render_baits(baits: dict) -> None:
             continue
         style, label = _SUPPORT_STYLE[key]
         rows = []
+        flagged = False
         for e in group[:8]:
             ci = (f"[{e['lo']:+.2f}, {e['hi']:+.2f}]"
                   if e["lo"] is not None else "-")
             diff = f"{e['diff']:+.2f}" if e["diff"] is not None else "-"
-            rows.append([e["bait"].replace("_", " "), e["trips"],
-                         f"{e['share']:.0f}%", _fmt(e["rate"]), diff, ci])
+            name = e["bait"].replace("_", " ")
+            if e.get("club_unstable"):
+                name += " †"
+                flagged = True
+            rows.append([name, e["trips"], f"{e['share']:.0f}%",
+                         _fmt(e["rate"]), diff, ci])
         _table(label, ["bait", "trips", "share", "fish/hr", "vs others", "95% CI"],
-               rows)
+               rows,
+               caption="† club-wide this bait cannot hold its sign from year to "
+                       "year. That is a caveat on the club average, not on this "
+                       "lake's own trips, which are counted here."
+                       if flagged else None)
         # Supporting detail for the ones worth acting on.
         for e in group[:3]:
             d = e.get("detail") or {}
@@ -291,6 +300,7 @@ def lake(name: str, season: str = typer.Option(None, help="Show baits for one se
     from .profile import lake_profile
     from .summarize import mention_index
 
+    from .baits import club_stability
     from .consistency import club_bust_rate, lake_consistency
     from .technique import technique_effects
 
@@ -301,7 +311,7 @@ def lake(name: str, season: str = typer.Option(None, help="Show baits for one se
     p = lake_profile(conn, name, trips=trips, lures=lures,
                      mentions=mention_index(conn, str(DB_PATH)),
                      club_technique=technique_effects(trips, A.tags_frame(conn), lures),
-                     consistency=cons)
+                     consistency=cons, bait_stability=club_stability(trips, lures))
     if "error" in p:
         console.print(f"[red]{p['error']}[/red]  Try `pwf lakes`.")
         raise typer.Exit(1)

@@ -198,19 +198,21 @@ def _cohorts(trips, lures) -> list[dict]:
 def _profiles(conn, trips, lures) -> dict:
     """One profile per lake, embedded so a click opens instantly with no
     network round-trip. Aggregates only - no member names, no report text."""
+    from pwf.baits import club_stability
     from pwf.config import DB_PATH
     from pwf.profile import lake_profile
     from pwf.summarize import mention_index
 
     # One pass over every report body, shared by all profiles.
     mentions = mention_index(conn, str(DB_PATH))
+    bait_stab = club_stability(trips, lures)
     counts = trips[trips["lake_known"] == 1]["lake"].value_counts()
     out = {}
     for name, n in counts.items():
         if n < 8:
             continue
         prof = lake_profile(conn, name, trips=trips, lures=lures,
-                            mentions=mentions)
+                            mentions=mentions, bait_stability=bait_stab)
         if "error" not in prof:
             out[name] = _slim(prof)
     return out

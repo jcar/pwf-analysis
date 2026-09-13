@@ -71,7 +71,8 @@ def lake_profile(conn: sqlite3.Connection, lake: str,
                  lures: pd.DataFrame | None = None,
                  mentions: dict | None = None,
                  club_technique: list | None = None,
-                 consistency: dict | None = None) -> dict:
+                 consistency: dict | None = None,
+                 bait_stability: dict | None = None) -> dict:
     """Assemble one lake's profile.
 
     Frames and the mention index may be passed in to avoid rebuilding them when
@@ -107,7 +108,7 @@ def lake_profile(conn: sqlite3.Connection, lake: str,
         "by_month": _by_month(scored),
         "by_slot": _by_slot(scored),
         "by_year": _by_year(scored),
-        "baits": _baits(sel, mine_lures),
+        "baits": _baits(sel, mine_lures, bait_stability),
         "water": _water(conn, sel, ids),
         "fish": _fish(conn, sel, ids),
         "conditions": _conditions(scored),
@@ -238,7 +239,7 @@ def _by_year(scored) -> list[dict]:
             for y, r in g.iterrows() if y == y]
 
 
-def _baits(sel, mine_lures) -> dict:
+def _baits(sel, mine_lures, stability=None) -> dict:
     """Producing baits, with how much the archive actually backs each one.
 
     The headline numbers come from `pwf.baits`, which matches a bait against the
@@ -267,7 +268,7 @@ def _baits(sel, mine_lures) -> dict:
             if got:
                 out["by_season"][season] = got[:6]
 
-    evidence = bait_evidence(sel, mine_lures)
+    evidence = bait_evidence(sel, mine_lures, stability=stability)
     # Supporting detail only for the baits a reader will actually act on.
     for e in evidence:
         if e["support"] in ("backed", "suggestive"):
@@ -385,6 +386,8 @@ def all_profiles(conn: sqlite3.Connection, min_reports: int = 8) -> dict[str, di
     mentions = mention_index(conn, str(DB_PATH))
     tags = A.tags_frame(conn)
     club_tech = technique_effects(trips, tags, lures)
+    from .baits import club_stability
+    bait_stab = club_stability(trips, lures)
     cons = lake_consistency(trips)
     cons["__club_bust__"] = club_bust_rate(trips)
 
@@ -394,7 +397,7 @@ def all_profiles(conn: sqlite3.Connection, min_reports: int = 8) -> dict[str, di
     for name in names:
         prof = lake_profile(conn, name, trips=trips, lures=lures,
                             mentions=mentions, club_technique=club_tech,
-                            consistency=cons)
+                            consistency=cons, bait_stability=bait_stab)
         if "error" not in prof:
             out[name] = prof
     return out

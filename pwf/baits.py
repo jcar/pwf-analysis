@@ -25,7 +25,7 @@ import math
 import pandas as pd
 
 from .effect import MIN_STRATUM, Z, bait_count_strata, classify, interval
-from .effect import stratified_effect
+from .effect import stratified_effect, year_consistency
 
 MIN_TRIPS = 6
 # A bait needs this many trips before an interval excluding zero is called
@@ -39,17 +39,65 @@ SUPPORT_ORDER = {"backed": 0, "suggestive": 1, "unproven": 2, "thin": 3,
                  "unstable": 4, "below": 5}
 
 
-def _classify(diff: float, lo: float, hi: float, n: int) -> str:
-    """Bait support. No year-stability check yet - see effect.year_consistency
-    and pwf/technique.py, where the same filter is applied and does real work."""
+def _classify(diff: float, lo: float, hi: float, n: int,
+              stable: bool | None = None) -> str:
     return classify(diff, lo, hi, n, MIN_TRIPS, SUGGESTIVE_MIN_TRIPS,
-                    BACKED_MIN_TRIPS)
+                    BACKED_MIN_TRIPS, stable=stable)
+
+
+def club_stability(trips: pd.DataFrame, lures: pd.DataFrame,
+                   level: str = "category", min_trips: int = 60) -> dict:
+    """Whether each bait's club-wide effect holds up year by year.
+
+    A pooled interval treats trips as independent when they cluster within
+    seasons, so it runs narrow. For techniques that mattered a lot - two cleared
+    the pooled interval and then flipped sign in half the years. For baits it
+    matters less: on the whole archive only one verdict changes. Worth knowing
+    either way, and worth knowing *which* one.
+
+    Individual lakes almost never carry enough trips per year to run this check
+    themselves - 7 of 68 do - so the club-wide verdict is what a per-lake row
+    leans on when its own sample cannot answer.
+    """
+    scored = trips.dropna(subset=["fish_per_hour"])
+    if len(scored) < 200 or lures.empty:
+        return {}
+    sel = scored.set_index("report_id")
+    sel = sel[~sel.index.duplicated()]
+    rates = sel["fish_per_hour"]
+    if "year" not in sel:
+        return {}
+    years = sel["year"]
+    mine = lures[lures["report_id"].isin(rates.index)] \
+        .drop_duplicates(subset=["report_id", level])
+    strata = bait_count_strata(mine, rates.index, level=level)
+
+    out = {}
+    for bait, grp in mine.groupby(level):
+        ids = {i for i in grp["report_id"].unique() if i in rates.index}
+        if len(ids) < min_trips:
+            continue
+        used = rates.loc[list(ids)]
+        other = rates.drop(index=list(ids), errors="ignore")
+        res = stratified_effect(used, other, strata)
+        if res is None:
+            continue
+        out[bait] = year_consistency(rates, years, ids, strata,
+                                     pooled_sign=1 if res[0] > 0 else -1)
+        out[bait]["diff"] = round(res[0], 3)
+    return out
 
 
 def bait_evidence(trips: pd.DataFrame, lures: pd.DataFrame,
-                  level: str = "category", min_trips: int = MIN_TRIPS
-                  ) -> list[dict]:
-    """Evidence for each bait at one lake, strongest support first."""
+                  level: str = "category", min_trips: int = MIN_TRIPS,
+                  stability: dict | None = None) -> list[dict]:
+    """Evidence for each bait at one lake, strongest support first.
+
+    `stability` is the club-wide year-by-year verdict from `club_stability`.
+    It is attached to each row as `club_unstable` - a caveat for the reader -
+    and deliberately does not change the verdict. Only a lake's own year record
+    can demote its own result; see the note in the loop below.
+    """
     scored = trips.dropna(subset=["fish_per_hour"])
     if len(scored) < 12 or lures.empty:
         return []
@@ -84,11 +132,31 @@ def bait_evidence(trips: pd.DataFrame, lures: pd.DataFrame,
                 "rate": round(float(used.mean()), 2), "baseline": round(baseline, 2),
                 "diff": None, "lo": None, "hi": None, "naive_diff": _r(naive),
                 "support": "thin", "share": round(100 * len(used) / len(rates), 0),
+                "years": 0, "years_agreeing": 0, "stable": None,
+                "club_unstable": bool(stability and bait in stability
+                                      and stability[bait]["stable"] is False),
             })
             continue
 
         diff, se, _n = res
         lo, hi = interval(diff, se)
+
+        local = year_consistency(rates, sel["year"], set(ids), strata,
+                                 pooled_sign=1 if diff > 0 else -1) \
+            if "year" in sel else {"stable": None, "years": 0, "agreeing": 0}
+
+        # Only this lake's own year-to-year record can demote this lake's
+        # result. A bait that cannot hold its sign across ninety lakes with
+        # different water is not thereby wrong about one of them - Hickory
+        # Creek's crankbait bite is 61 trips with an interval clear of zero,
+        # while club-wide crankbait averages nothing and swings from -1.9 to
+        # +0.3 by year. Those are different claims, and folding the second into
+        # the first would erase real local knowledge. The club verdict is
+        # carried as a caveat instead.
+        stable = local["stable"]
+        club_unstable = bool(stability and bait in stability
+                             and stability[bait]["stable"] is False)
+
         out.append({
             "bait": bait,
             "trips": int(len(used)),
@@ -97,7 +165,9 @@ def bait_evidence(trips: pd.DataFrame, lures: pd.DataFrame,
             "baseline": round(baseline, 2),
             "diff": _r(diff), "lo": _r(lo), "hi": _r(hi),
             "naive_diff": _r(naive),
-            "support": _classify(diff, lo, hi, len(used)),
+            "years": local["years"], "years_agreeing": local["agreeing"],
+            "stable": stable, "club_unstable": club_unstable,
+            "support": _classify(diff, lo, hi, len(used), stable),
         })
 
     out.sort(key=lambda d: (SUPPORT_ORDER.get(d["support"], 9),
@@ -147,6 +217,7 @@ def recommendation(evidence: list[dict], detail_fn=None) -> dict:
     unproven = [e for e in evidence if e["support"] == "unproven"]
     below = [e for e in evidence if e["support"] == "below"]
     thin = [e for e in evidence if e["support"] == "thin"]
+    unstable = [e for e in evidence if e["support"] == "unstable"]
 
     if backed:
         lead = (f"{_name(backed[0]['bait'])} is the one bait here the archive "
@@ -166,6 +237,7 @@ def recommendation(evidence: list[dict], detail_fn=None) -> dict:
         "lead": lead,
         "backed": backed, "suggestive": suggestive,
         "unproven": unproven, "below": below, "thin": thin,
+        "unstable": unstable,
         "n_compared": len(evidence),
     }
 

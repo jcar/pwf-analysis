@@ -672,6 +672,13 @@ function baitEvidence(baits) {
       d.style.color = e.lo > 0 ? "var(--u4)" : e.hi < 0 ? "var(--d4)" : "var(--ink-2)";
       row.append(d);
       row.append(el("div", "n", `${e.trips} trips · ${e.share}%`));
+      if (e.club_unstable) {
+        const f = el("div", "dt",
+          "† club-wide this bait does not hold its sign from year to year — a " +
+          "caveat on the club average, not on this lake's own trips");
+        f.style.color = "var(--ink-3)";
+        row.append(f);
+      }
       if (e.lo != null) row.append(ciBar(e, scale));
       const dt = e.detail || {};
       const bits = [];
