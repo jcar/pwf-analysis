@@ -39,14 +39,14 @@ def build_dashboard(conn: sqlite3.Connection, out: str) -> Path:
 PAGE = r"""<title>Private Water Pattern Book</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Sans+3:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Sans+3:wght@400;500;600&display=swap">
 <style>
 :root{
   color-scheme: light;
-  --ground:#f7f8f6; --surface:#ffffff; --surface-2:#eef1ed; --surface-3:#e4e9e4;
-  --ink:#10201c; --ink-2:#54635e; --ink-3:#8a968f;
-  --rule:#dbe1db; --rule-strong:#c3ccc4;
-  --accent:#1f6b5c; --accent-soft:#e2efea;
+  --ground:#f4f2e9; --surface:#fbfaf4; --surface-2:#eae7d9; --surface-3:#ddd9c7;
+  --ink:#161c12; --ink-2:#4d5745; --ink-3:#767f6b;
+  --rule:#d8d4c2; --rule-strong:#bdb8a2;
+  --accent:#7a5f1c; --accent-soft:#efe9d5; --lateral:#20281a;
   --d4:#b23434; --d3:#dd6b6b; --d2:#eda3a3; --d1:#f7d6d6;
   --dmid:#eceeea;
   --u1:#cde2fb; --u2:#86b6ef; --u3:#3987e5; --u4:#1c5cab;
@@ -56,10 +56,10 @@ PAGE = r"""<title>Private Water Pattern Book</title>
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     color-scheme: dark;
-    --ground:#101310; --surface:#171b18; --surface-2:#1f241f; --surface-3:#272d28;
-    --ink:#eef2ee; --ink-2:#a5b1a8; --ink-3:#727e75;
-    --rule:#2a312b; --rule-strong:#3a433c;
-    --accent:#5cc0a6; --accent-soft:#16302a;
+    --ground:#141811; --surface:#1b2018; --surface-2:#232a1f; --surface-3:#2d3528;
+    --ink:#eef0e6; --ink-2:#9aa691; --ink-3:#7a8571;
+    --rule:#2b3327; --rule-strong:#3d4636;
+    --accent:#d4ae4a; --accent-soft:#252d1c; --lateral:#c3cbb6;
     --d4:#e88585; --d3:#cf5a5a; --d2:#a83a3a; --d1:#7d2828;
     --dmid:#2b302c;
     --u1:#1b3f6b; --u2:#1c5cab; --u3:#3987e5; --u4:#86b6ef;
@@ -68,15 +68,25 @@ PAGE = r"""<title>Private Water Pattern Book</title>
 }
 :root[data-theme="dark"]{
   color-scheme: dark;
-  --ground:#101310; --surface:#171b18; --surface-2:#1f241f; --surface-3:#272d28;
-  --ink:#eef2ee; --ink-2:#a5b1a8; --ink-3:#727e75;
-  --rule:#2a312b; --rule-strong:#3a433c;
-  --accent:#5cc0a6; --accent-soft:#16302a;
+  --ground:#141811; --surface:#1b2018; --surface-2:#232a1f; --surface-3:#2d3528;
+  --ink:#eef0e6; --ink-2:#9aa691; --ink-3:#7a8571;
+  --rule:#2b3327; --rule-strong:#3d4636;
+  --accent:#d4ae4a; --accent-soft:#252d1c; --lateral:#c3cbb6;
   --d4:#e88585; --d3:#cf5a5a; --d2:#a83a3a; --d1:#7d2828;
   --dmid:#2b302c;
   --u1:#1b3f6b; --u2:#1c5cab; --u3:#3987e5; --u4:#86b6ef;
   --on-dark:#0d100e; --on-light:#eef2ee;
 }
+
+/* --- the bathymetric device: contour field and the lateral line ---------- */
+.contours{position:absolute; inset:0; pointer-events:none; opacity:.5}
+.contours path{fill:none; stroke:var(--rule-strong); stroke-width:1}
+.lateral{height:9px; margin:0; border:0; background:var(--lateral);
+  clip-path:polygon(0 40%,4% 20%,9% 55%,14% 25%,20% 60%,26% 22%,32% 58%,38% 28%,
+    45% 62%,52% 24%,58% 56%,65% 26%,71% 60%,78% 22%,84% 58%,90% 28%,96% 54%,
+    100% 34%,100% 66%,96% 82%,90% 48%,84% 78%,78% 44%,71% 80%,65% 46%,58% 76%,
+    52% 44%,45% 80%,38% 48%,32% 78%,26% 44%,20% 80%,14% 46%,9% 76%,4% 44%,0 70%);
+  opacity:.55; margin:38px 0 30px}
 
 *{box-sizing:border-box}
 body{
@@ -86,7 +96,7 @@ body{
   -webkit-font-smoothing:antialiased;
 }
 .wrap{max-width:1120px; margin:0 auto; padding-inline:20px; padding-block:0 72px}
-h1,h2,h3{font-family:Bitter, Georgia, serif; text-wrap:balance; margin:0}
+h1,h2,h3{font-family:Fraunces, "Iowan Old Style", Georgia, serif; text-wrap:balance; margin:0}
 h1{font-size:clamp(28px,4.6vw,44px); font-weight:700; letter-spacing:-.015em; line-height:1.1}
 h2{font-size:20px; font-weight:600; letter-spacing:-.005em}
 h3{font-size:15px; font-weight:600}
@@ -97,7 +107,113 @@ h3{font-size:15px; font-weight:600}
 }
 
 /* ---- masthead ---- */
-header.top{border-bottom:1px solid var(--rule-strong); padding-block:40px 26px; margin-bottom:34px}
+header.top{position:relative; border-bottom:1px solid var(--rule-strong);
+  padding-block:44px 26px; margin-bottom:30px; overflow:hidden}
+header.top > *{position:relative}
+
+/* --- planner --------------------------------------------------------------- */
+.daybar{display:flex; flex-wrap:wrap; gap:10px 14px; align-items:center;
+  margin:20px 0 6px}
+.daybtn{font:inherit; font-size:14px; padding:7px 16px; cursor:pointer;
+  background:var(--surface); color:var(--ink-2); border:1px solid var(--rule-strong);
+  border-radius:2px}
+.daybtn[aria-pressed="true"]{background:var(--lateral); color:var(--ground);
+  border-color:var(--lateral); font-weight:600}
+.daybtn:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.wx{font-size:13.5px; color:var(--ink-2); font-family:"IBM Plex Mono",monospace}
+.wx b{color:var(--ink)}
+
+.plan-grid{display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:26px;
+  align-items:start}
+@media (max-width:980px){ .plan-grid{grid-template-columns:1fr} }
+
+.maprail{display:grid; gap:18px}
+.mapbox{border:1px solid var(--rule); background:var(--surface); padding:10px}
+.mapbox svg{display:block; width:100%; height:auto}
+.mp-state{fill:var(--surface-2); stroke:var(--rule-strong); stroke-width:1}
+.mp-ring{fill:none; stroke:var(--rule-strong); stroke-width:1; stroke-dasharray:3 5}
+.mp-ringlab{fill:var(--ink-3); font:500 10px "IBM Plex Mono",monospace}
+.mp-city{fill:var(--ink-3); font:500 10px "Source Sans 3",sans-serif}
+.mp-citydot{fill:var(--ink-3)}
+.mp-home{fill:var(--accent)}
+.mp-lake{fill:var(--ink-3); opacity:.42}
+.mp-pick{stroke:var(--surface); stroke-width:1.2; cursor:pointer}
+.mp-lab{fill:var(--ink); font:600 10.5px "Source Sans 3",sans-serif;
+  paint-order:stroke; stroke:var(--surface); stroke-width:3px}
+.mp-sel{fill:none; stroke:var(--accent); stroke-width:2.5}
+.mp-leg{fill:var(--ink-3); font:500 10px "IBM Plex Mono",monospace}
+.mp-line{stroke:var(--accent); stroke-width:1.2; stroke-dasharray:2 3; opacity:.8}
+
+.scat{border:1px solid var(--rule); background:var(--surface); padding:10px}
+.scat svg{display:block; width:100%; height:auto}
+.sc-ax{stroke:var(--rule-strong); stroke-width:1}
+.sc-gr{stroke:var(--rule); stroke-width:1}
+.sc-lab{fill:var(--ink-3); font:500 10px "IBM Plex Mono",monospace}
+.sc-dot{fill:var(--ink-3); opacity:.35}
+.sc-pick{cursor:pointer; stroke:var(--surface); stroke-width:1}
+.sc-sel{fill:none; stroke:var(--accent); stroke-width:2.5}
+.sc-name{fill:var(--ink); font:600 10px "Source Sans 3",sans-serif;
+  paint-order:stroke; stroke:var(--surface); stroke-width:3px}
+
+table.short{border-collapse:collapse; width:100%; background:var(--surface);
+  border:1px solid var(--rule)}
+table.short th{font:600 11px "Source Sans 3",sans-serif; letter-spacing:.07em;
+  text-transform:uppercase; color:var(--ink-3); text-align:right; padding:9px 11px;
+  border-bottom:1px solid var(--rule-strong); background:var(--surface-2);
+  cursor:pointer; user-select:none; white-space:nowrap}
+table.short th:first-child{text-align:left}
+table.short th[aria-sort]{color:var(--accent)}
+table.short td{padding:8px 11px; text-align:right; font-size:13.5px;
+  border-bottom:1px solid var(--rule); font-variant-numeric:tabular-nums;
+  font-family:"IBM Plex Mono",monospace; white-space:nowrap}
+table.short td:first-child{text-align:left; font-family:"Source Sans 3",sans-serif}
+table.short tbody tr{cursor:pointer}
+table.short tbody tr:hover td{background:var(--surface-2)}
+table.short tbody tr.is-sel td{background:var(--accent-soft)}
+table.short tbody tr.is-sel td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+.rk{color:var(--ink-3); font-family:"IBM Plex Mono",monospace; font-size:12px}
+
+.brief{border:1px solid var(--rule-strong); background:var(--surface);
+  margin-top:26px}
+.brief-hd{padding:20px 22px 16px; border-bottom:1px solid var(--rule);
+  background:var(--surface-2)}
+.brief-hd h3{font-family:Fraunces,Georgia,serif; font-size:24px; font-weight:600;
+  margin:0 0 5px}
+.brief-hd .sub{font-size:13px; color:var(--ink-2);
+  font-family:"IBM Plex Mono",monospace}
+.brief-body{padding:20px 22px 22px; display:grid; gap:22px}
+.bsec > h4{font:600 11px "Source Sans 3",sans-serif; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-3); margin:0 0 9px}
+.bstat{display:flex; flex-wrap:wrap; gap:8px 26px; align-items:baseline}
+.bstat .v{font-family:"IBM Plex Mono",monospace; font-size:27px; font-weight:600}
+.bstat .k{font-size:12.5px; color:var(--ink-3)}
+.bline{font-size:14.5px; line-height:1.6; margin:8px 0 0; max-width:70ch}
+.bnote{font-size:13.5px; line-height:1.55; color:var(--ink); margin:8px 0 0;
+  padding:9px 13px; background:var(--accent-soft); border-left:3px solid var(--accent);
+  max-width:74ch}
+.pitem{display:grid; grid-template-columns:1fr auto auto; gap:3px 12px;
+  padding:8px 0; border-bottom:1px solid var(--rule); align-items:center}
+.pitem:last-child{border-bottom:none}
+.pitem .nm{font-size:14.5px; font-weight:500}
+.pitem .d{font-family:"IBM Plex Mono",monospace; font-size:13.5px; font-weight:600}
+.pitem .m{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--ink-3)}
+.pitem .sub{grid-column:1/-1; font-size:12.5px; color:var(--ink-2)}
+.skip{font-size:13.5px; color:var(--ink-2)}
+
+details.ev{margin-top:7px; font-size:12.5px}
+details.ev summary{cursor:pointer; color:var(--accent); font-weight:600;
+  list-style:none; display:inline-flex; gap:5px; align-items:center}
+details.ev summary::-webkit-details-marker{display:none}
+details.ev summary::before{content:"▸"; font-size:10px}
+details.ev[open] summary::before{content:"▾"}
+details.ev summary:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.evbody{margin-top:8px; padding:11px 13px; background:var(--surface-2);
+  border-left:2px solid var(--rule-strong); color:var(--ink-2); line-height:1.55}
+.evbody table{border-collapse:collapse; margin-top:7px; font-size:12px}
+.evbody td{padding:2px 10px 2px 0; font-family:"IBM Plex Mono",monospace}
+.evbody a{color:var(--accent)}
+.archive-head{display:flex; align-items:baseline; justify-content:space-between;
+  gap:16px; flex-wrap:wrap; margin:10px 0 20px}
 .lede{color:var(--ink-2); max-width:62ch; margin:14px 0 0; font-size:16.5px}
 .provenance{
   display:flex; flex-wrap:wrap; gap:6px 20px; margin-top:20px;
@@ -192,7 +308,453 @@ table.lakes tbody tr:hover td{background:var(--surface-2)}
   font-family:"Source Sans 3",sans-serif}
 .tag.focus{background:var(--accent-soft); color:var(--accent); font-weight:600}
 
-/* ---- weekend panel ---- */
+/* ---- contour field in the masthead ---- */
+(function contours() {
+  const svg = document.getElementById("contours");
+  if (!svg) return;
+  const W = 1200, H = 220;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  let d = "";
+  // Nested closed contours, the way a lake basin reads on a chart.
+  for (let i = 0; i < 9; i++) {
+    const k = i / 9, amp = 16 + i * 5, y = H * 0.52 + (i - 4) * 15;
+    let pts = "";
+    for (let x = -40; x <= W + 40; x += 24) {
+      const t = x / W * Math.PI * 2;
+      pts += `${x},${(y + Math.sin(t * 1.6 + k * 5) * amp
+        + Math.sin(t * 3.1 + k * 2) * amp * 0.35).toFixed(1)} `;
+    }
+    d += "M" + pts.trim().split(" ").join("L") + " ";
+  }
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", d);
+  svg.append(path);
+})();
+
+/* ---- the planner ---- */
+const P = D.planner || {};
+let planDay = P.default_day;
+let selLake = null;
+
+function svgEl(tag, attrs, text) {
+  const n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const k in (attrs || {})) n.setAttribute(k, attrs[k]);
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+function dayData() { return (P.days || {})[planDay] || {}; }
+function rateColor(v, max) {
+  const ramp = ["--u1", "--u2", "--u3", "--u4"];
+  const i = Math.min(ramp.length - 1, Math.floor((v / (max || 1)) * ramp.length));
+  return "var(" + ramp[Math.max(0, i)] + ")";
+}
+
+function drawMap() {
+  const m = P.map, host = $("#mapbox");
+  if (!m || !host) return;
+  host.textContent = "";
+  const day = dayData();
+  const picks = new Map((day.shortlist || []).map((r, i) => [r.lake, { ...r, rank: i + 1 }]));
+  const max = Math.max(...(day.shortlist || []).map(r => r.expected_fph || 0), 1);
+
+  const svg = svgEl("svg", {
+    viewBox: `0 0 ${m.width} ${m.height}`, role: "img",
+    "aria-label": "Club lakes and drive distance from Dallas",
+  });
+  m.states.forEach(st => svg.append(svgEl("path", { d: st.d, class: "mp-state" })));
+  m.rings.forEach(r => {
+    svg.append(svgEl("path", { d: r.d, class: "mp-ring" }));
+    svg.append(svgEl("text", {
+      x: r.label_x + 4, y: r.label_y + 11, class: "mp-ringlab",
+    }, `${r.miles} mi`));
+  });
+  m.cities.forEach(c => {
+    if (c.home) return;
+    svg.append(svgEl("circle", { cx: c.x, cy: c.y, r: 2, class: "mp-citydot" }));
+    svg.append(svgEl("text", { x: c.x + 5, y: c.y + 3.5, class: "mp-city" }, c.name));
+  });
+  // every lake, so the shortlist is seen in context
+  m.lakes.forEach(l => {
+    if (picks.has(l.lake)) return;
+    // Node.append() returns undefined, so the title has to be attached to the
+    // circle before the circle goes into the document.
+    const dot = svgEl("circle", { cx: l.x, cy: l.y, r: 2.6, class: "mp-lake" });
+    dot.append(svgEl("title", {}, l.lake));
+    svg.append(dot);
+  });
+  const home = m.home;
+  svg.append(svgEl("circle", { cx: home.x, cy: home.y, r: 4.5, class: "mp-home" }));
+  svg.append(svgEl("text", { x: home.x + 7, y: home.y + 4, class: "mp-city" }, "Dallas"));
+
+  m.lakes.forEach(l => {
+    const pick = picks.get(l.lake);
+    if (!pick) return;
+    if (selLake === l.lake) {
+      svg.append(svgEl("line", {
+        x1: home.x, y1: home.y, x2: l.x, y2: l.y, class: "mp-line",
+      }));
+    }
+    const c = svgEl("circle", {
+      cx: l.x, cy: l.y, r: 6.5, class: "mp-pick",
+      fill: rateColor(pick.expected_fph, max),
+      "data-lake": l.lake,
+    });
+    c.append(svgEl("title", {},
+      `${l.lake} — ${fmt(pick.expected_fph)} fish/hr, ${Math.round(pick.miles)} mi`));
+    c.addEventListener("click", () => selectLake(l.lake));
+    svg.append(c);
+    if (selLake === l.lake)
+      svg.append(svgEl("circle", { cx: l.x, cy: l.y, r: 10, class: "mp-sel" }));
+    svg.append(svgEl("text", { x: l.x + 9, y: l.y + 3.5, class: "mp-lab" },
+      String(pick.rank)));
+  });
+  svg.append(svgEl("text", { x: 8, y: m.height - 8, class: "mp-leg" },
+    "rings = drive distance · numbers = rank · deeper blue = better"));
+  host.append(svg);
+}
+
+function drawScatter() {
+  const host = $("#scat");
+  const day = dayData();
+  const rows = (day.shortlist || []).filter(r => r.miles != null);
+  if (!host || !rows.length) return;
+  host.textContent = "";
+  const W = 340, H = 260, L = 44, B = 34, T = 14, R = 12;
+  const maxMi = Math.max(...rows.map(r => r.miles), 60) * 1.08;
+  const maxF = Math.max(...rows.map(r => r.expected_fph), 1) * 1.12;
+  const x = v => L + (v / maxMi) * (W - L - R);
+  const y = v => H - B - (v / maxF) * (H - B - T);
+  const svg = svgEl("svg", {
+    viewBox: `0 0 ${W} ${H}`, role: "img",
+    "aria-label": "Expected catch rate against drive distance",
+  });
+  [0, 0.25, 0.5, 0.75, 1].forEach(f => {
+    svg.append(svgEl("line", {
+      x1: L, x2: W - R, y1: y(maxF * f), y2: y(maxF * f), class: "sc-gr",
+    }));
+    svg.append(svgEl("text", { x: L - 6, y: y(maxF * f) + 3.5, class: "sc-lab",
+      "text-anchor": "end" }, (maxF * f).toFixed(0)));
+  });
+  svg.append(svgEl("line", { x1: L, x2: W - R, y1: H - B, y2: H - B, class: "sc-ax" }));
+  [0, 60, 120, 180].filter(v => v <= maxMi).forEach(v => {
+    svg.append(svgEl("text", { x: x(v), y: H - B + 15, class: "sc-lab",
+      "text-anchor": "middle" }, String(v)));
+  });
+  svg.append(svgEl("text", { x: (L + W - R) / 2, y: H - 6, class: "sc-lab",
+    "text-anchor": "middle" }, "drive, miles"));
+  svg.append(svgEl("text", { x: 10, y: 11, class: "sc-lab" }, "fish/hr"));
+
+  const max = Math.max(...rows.map(r => r.expected_fph || 0), 1);
+  rows.forEach(r => {
+    const c = svgEl("circle", {
+      cx: x(r.miles), cy: y(r.expected_fph), r: 6, class: "sc-pick",
+      fill: rateColor(r.expected_fph, max), "data-lake": r.lake,
+    });
+    c.append(svgEl("title", {},
+      `${r.lake} — ${fmt(r.expected_fph)} fish/hr, ${Math.round(r.miles)} mi`));
+    c.addEventListener("click", () => selectLake(r.lake));
+    svg.append(c);
+    if (selLake === r.lake) {
+      svg.append(svgEl("circle", {
+        cx: x(r.miles), cy: y(r.expected_fph), r: 10, class: "sc-sel" }));
+      svg.append(svgEl("text", {
+        x: x(r.miles) + 12, y: y(r.expected_fph) + 3.5, class: "sc-name" }, r.lake));
+    }
+  });
+  host.append(svg);
+}
+
+let shortSort = { key: "score", dir: -1 };
+function drawShortlist() {
+  const t = $("#short"), day = dayData();
+  const rows = (day.shortlist || []).map((r, i) => ({ ...r, rank: i + 1 }));
+  if (!t || !rows.length) return;
+  t.textContent = "";
+  const cols = [
+    ["lake", "Lake"], ["expected_fph", "Fish/hr"], ["miles", "Drive"],
+    ["day_rate", "$/day"], ["n_total", "Trips"], ["band", "Spread"],
+    ["bust", "Bust"],
+  ];
+  const head = t.createTHead().insertRow();
+  cols.forEach(([key, label]) => {
+    const th = el("th", null, label);
+    th.dataset.key = key;
+    if (shortSort.key === key)
+      th.setAttribute("aria-sort", shortSort.dir === 1 ? "ascending" : "descending");
+    th.addEventListener("click", () => {
+      shortSort = { key, dir: shortSort.key === key ? -shortSort.dir
+        : (key === "lake" ? 1 : -1) };
+      drawShortlist();
+    });
+    head.append(th);
+  });
+  const val = (r, k) => k === "band" ? ((r.consistency || {}).band || "")
+    : k === "bust" ? ((r.consistency || {}).bust_rate ?? -1) : r[k];
+  rows.sort((a, b) => {
+    const x = val(a, shortSort.key), y = val(b, shortSort.key);
+    if (x == null) return 1;
+    if (y == null) return -1;
+    return (typeof x === "string" ? x.localeCompare(y) : x - y) * shortSort.dir;
+  });
+  const tb = t.createTBody();
+  rows.forEach(r => {
+    const cs = r.consistency || {};
+    const tr = tb.insertRow();
+    if (selLake === r.lake) tr.className = "is-sel";
+    tr.addEventListener("click", () => selectLake(r.lake));
+    const c0 = tr.insertCell();
+    c0.append(el("span", "rk", "#" + r.rank + "  "), document.createTextNode(r.lake));
+    [fmt(r.expected_fph), r.miles == null ? "–" : Math.round(r.miles) + " mi",
+     r.day_rate ? "$" + Math.round(r.day_rate) : "–", r.n_total,
+     cs.band || "–", cs.bust_rate == null ? "–" : Math.round(cs.bust_rate) + "%"]
+      .forEach(v => tr.insertCell().textContent = v);
+  });
+}
+
+function ev(summaryText, bodyNode) {
+  const d = el("details", "ev");
+  d.append(el("summary", null, summaryText));
+  const b = el("div", "evbody");
+  b.append(bodyNode);
+  d.append(b);
+  return d;
+}
+function citeTable(cites) {
+  const wrap = el("div");
+  if (!cites || !cites.length) {
+    wrap.append(el("div", null, "No individual trips recorded for this one."));
+    return wrap;
+  }
+  wrap.append(el("div", null,
+    `The ${cites.length} most recent trips this rests on — each opens the member's `
+    + `report on the club site:`));
+  const t = el("table");
+  cites.forEach(([id, when, fish]) => {
+    const tr = el("tr");
+    const a = el("a", null, "report " + id);
+    a.href = (P.report_url || "") + id;
+    a.target = "_blank";
+    a.rel = "noopener";
+    const c1 = el("td"); c1.append(a);
+    tr.append(c1, el("td", null, when),
+      el("td", null, fish == null ? "no count" : fish + " fish"));
+    t.append(tr);
+  });
+  wrap.append(t);
+  return wrap;
+}
+
+function drawBrief() {
+  const host = $("#brief"), day = dayData();
+  if (!host) return;
+  const b = (day.briefs || {})[selLake];
+  host.textContent = "";
+  if (!b) return;
+  const prof = (D.profiles || {})[selLake] || {};
+  const f = prof.facts || {}, ex = b.expected, exp = b.expect, plan = b.plan;
+
+  const hd = el("div", "brief-hd");
+  hd.append(el("h3", null, b.lake));
+  const bits = [];
+  if (f.miles != null) bits.push(`${f.miles} mi from Dallas`);
+  if (f.day_rate) bits.push(`$${f.day_rate}/day`);
+  if (f.acres) bits.push(`${f.acres} acres`);
+  if (f.max_depth_ft) bits.push(`max ${f.max_depth_ft} ft`);
+  if (f.boat_type) bits.push(f.boat_type);
+  hd.append(el("div", "sub", `${b.weekday} ${b.date}  ·  ` + bits.join("  ·  ")));
+  host.append(hd);
+
+  const body = el("div", "brief-body");
+
+  // ---- expect ----
+  const s1 = el("div", "bsec");
+  s1.append(el("h4", null, "What to expect"));
+  const st = el("div", "bstat");
+  [[fmt(ex.fph) + " fish/hr", `expected for ${ex.month_name} (club ${ex.club_month_mean})`],
+   [exp.typical_fish ?? "–", "fish on a typical day"],
+   [exp.worst_decile ?? "–", "fish/hr on the slowest day in ten"],
+   [(exp.bust_rate ?? "–") + "%", `came back with 2 or fewer (club ${Math.round(exp.club_bust_rate)}%)`]
+  ].forEach(([v, k]) => {
+    const d = el("div");
+    d.append(el("div", "v", String(v)), el("div", "k", k));
+    st.append(d);
+  });
+  s1.append(st);
+  const monthRows = (prof.by_month || []).filter(m => m.n);
+  s1.append(ev(`Where ${fmt(ex.fph)} comes from`, (() => {
+    const w = el("div");
+    w.append(el("div", null,
+      `Blended from this lake's ${ex.n_total} scored trips, weighted toward recent `
+      + `years and shrunk toward the club mean by how little backs it. Basis: `
+      + `${ex.basis === "lake-month" ? `its own ${ex.month_name} record (${ex.n_basis} trips)`
+        : "its year-round average, scaled by the club's seasonal shape"}. `
+      + `Backtested across six held-out years, a lake's history predicts its next `
+      + `season at about r=0.65.`));
+    if (monthRows.length) w.append(bars(monthRows, "month", "median", "n"));
+    return w;
+  })()));
+  if (exp.sentence) s1.append(el("p", "bline", exp.sentence));
+  s1.append(ev("How reliable is that?", el("div", null, exp.caveat)));
+  body.append(s1);
+
+  // ---- conditions ----
+  const cond = b.conditions || {};
+  if (cond.forecast) {
+    const s2 = el("div", "bsec");
+    const fc = cond.forecast;
+    s2.append(el("h4", null, "Conditions that day"));
+    s2.append(el("p", "bline",
+      `${Math.round(fc.temp_max_f)}°F high · ${Math.round(fc.wind_max_mph)} mph `
+      + `· ${fc.cloud_pct}% cloud · ${fc.pressure_trend || "steady"} pressure`));
+    if (cond.note) s2.append(el("p", "bnote", cond.note));
+    s2.append(ev("Why the forecast is not in the ranking", el("div", null,
+      "Measured inside each lake-month, the largest weather effect in this archive "
+      + "— calm against windy — is about 10% with a confidence interval that "
+      + "includes zero. Cloud is 9%, pressure 7%, moon 3%. Lake and month separate "
+      + "lakes threefold. So conditions are shown to plan the day around, not to "
+      + "pick the lake.")));
+    body.append(s2);
+  }
+
+  // ---- the plan ----
+  const pres = plan.presentation || {};
+  const s3 = el("div", "bsec");
+  s3.append(el("h4", null, "How to fish it"));
+  if (pres.lead) s3.append(el("p", "bline", pres.lead + "."));
+  (pres.use || []).forEach(u => {
+    const row = el("div", "pitem");
+    row.append(el("div", "nm", u.label));
+    const d = el("div", "d", `${u.diff >= 0 ? "+" : ""}${u.diff.toFixed(2)} fish/hr`);
+    d.style.color = "var(--u4)";
+    row.append(d, el("div", "m", `${u.years_agreeing}/${u.years} yrs`));
+    if (u.here) {
+      const against = u.here.diff < 0 ? " — against the club pattern here" : "";
+      row.append(el("div", "sub",
+        `at this lake ${u.here.diff >= 0 ? "+" : ""}${u.here.diff.toFixed(2)} over `
+        + `${u.here.trips} trips${against}`));
+    }
+    s3.append(row);
+  });
+  if ((pres.avoid || []).length)
+    s3.append(el("p", "skip", "Leave alone: " + pres.avoid
+      .map(a => `${a.label} (${a.diff.toFixed(2)})`).join(", ")));
+  s3.append(ev("What 'holds up' means", el("div", null,
+    "Each presentation is compared against the other trips that named about as many "
+    + "baits, because trips describing more tackle catch more fish and would "
+    + "otherwise flatter everything at once. The years column counts how many "
+    + "separate years agree with the pooled result — two techniques clear the "
+    + "pooled interval and then flip sign in half the years, so they are not "
+    + "promoted.")));
+  body.append(s3);
+
+  // ---- baits ----
+  const baits = plan.baits || {};
+  const s4 = el("div", "bsec");
+  s4.append(el("h4", null, "What to tie on"));
+  s4.append(el("p", "bline", (baits.lead || "") + "."));
+  ["backed", "suggestive"].forEach(key => {
+    (baits[key] || []).slice(0, 3).forEach(e => {
+      const row = el("div", "pitem");
+      row.append(el("div", "nm", baitName(e.bait) + (e.club_unstable ? " †" : "")));
+      const d = el("div", "d", `${e.diff >= 0 ? "+" : ""}${e.diff.toFixed(2)} fish/hr`);
+      d.style.color = e.lo > 0 ? "var(--u4)" : "var(--ink-2)";
+      row.append(d, el("div", "m", `${e.trips} trips`));
+      row.append(el("div", "sub",
+        `95% interval ${e.lo.toFixed(2)} to ${e.hi.toFixed(2)}`
+        + (e.club_unstable
+          ? " · † club-wide this bait does not hold its sign year to year" : "")));
+      row.append(ev(`The ${(b.citations[e.bait] || []).length} trips behind this`,
+        citeTable(b.citations[e.bait])));
+      s4.append(row);
+    });
+  });
+  if ((baits.below || []).length)
+    s4.append(el("p", "skip", "Measurably behind here: " + baits.below.slice(0, 3)
+      .map(e => `${baitName(e.bait)} (${e.diff.toFixed(2)})`).join(", ")));
+  body.append(s4);
+
+  // ---- where ----
+  if ((plan.where || []).length) {
+    const s5 = el("div", "bsec");
+    s5.append(el("h4", null, "Where they fish it"));
+    s5.append(el("p", "bline", "Members name " + plan.where
+      .map(w => `${w.value.replace(/_/g, " ")} (${w.n})`).join(", ") + "."));
+    if ((plan.vegetation || []).length)
+      s5.append(el("p", "skip", "Growth: " + plan.vegetation
+        .map(v => `${v.value.replace(/_/g, " ")} (${v.n})`).join(", ")));
+    body.append(s5);
+  }
+
+  const s6 = el("div", "bsec");
+  s6.append(el("h4", null, "Which slot"));
+  s6.append(el("p", "bline", plan.slot_note));
+  body.append(s6);
+
+  const more = el("p", "skip");
+  const a = el("a", null, "Full profile for " + b.lake + " →");
+  a.href = "#lake/" + encodeURIComponent(b.lake);
+  a.style.color = "var(--accent)";
+  more.append(a);
+  body.append(more);
+
+  host.append(body);
+}
+
+function selectLake(name) {
+  selLake = name;
+  drawMap(); drawScatter(); drawShortlist(); drawBrief();
+  const el_ = $("#brief");
+  if (el_) el_.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function drawDaybar() {
+  const bar = $("#daybar");
+  if (!bar || !P.days) return;
+  bar.textContent = "";
+  Object.keys(P.days).forEach(key => {
+    const d = P.days[key];
+    const b = el("button", "daybtn", `${d.weekday} ${key.slice(5)}`);
+    b.type = "button";
+    b.id = "day-" + key;
+    b.setAttribute("aria-pressed", String(key === planDay));
+    b.addEventListener("click", () => {
+      planDay = key;
+      const sl = dayData().shortlist || [];
+      if (!sl.some(r => r.lake === selLake)) selLake = sl.length ? sl[0].lake : null;
+      drawPlanner();
+    });
+    bar.append(b);
+  });
+}
+
+function drawPlanner() {
+  if (!P.days) return;
+  const day = dayData();
+  drawDaybar();
+  const note = $("#plan-note");
+  if (note) note.innerHTML =
+    `Ranked on what each lake has actually produced in <b>${day.month_name}</b>, `
+    + `within <b>${day.max_miles} miles</b>, out of <b>${day.considered}</b> lakes. `
+    + `The club averages ${day.club_month_mean} fish an hour this month. Pick a lake `
+    + `on the map, the plot or the table — everything below it opens onto the trips `
+    + `it came from.`;
+  const wx = $("#wx");
+  const top = (day.briefs || {})[selLake] || Object.values(day.briefs || {})[0];
+  const fc = top && top.conditions ? top.conditions.forecast : null;
+  if (wx && fc) wx.innerHTML =
+    `Forecast around Dallas: <b>${Math.round(fc.temp_max_f)}°F</b>, `
+    + `<b>${Math.round(fc.wind_max_mph)} mph</b>, ${fc.cloud_pct}% cloud`;
+  drawMap(); drawScatter(); drawShortlist(); drawBrief();
+}
+
+if (P.days) {
+  const first = dayData().shortlist || [];
+  selLake = first.length ? first[0].lake : null;
+  drawPlanner();
+}
+
+/* ---- weekend panel ---- 
 .wk{display:grid; grid-template-columns:repeat(auto-fit,minmax(232px,1fr)); gap:1px;
   background:var(--rule); border:1px solid var(--rule)}
 .wk-card{background:var(--surface); padding:15px 16px 14px; cursor:pointer;
@@ -200,7 +762,7 @@ table.lakes tbody tr:hover td{background:var(--surface-2)}
 .wk-card:hover{background:var(--surface-2)}
 .wk-card .rank{font-size:11px; letter-spacing:.1em; color:var(--ink-3);
   text-transform:uppercase}
-.wk-card .nm{font-family:Bitter,Georgia,serif; font-weight:600; font-size:16px}
+.wk-card .nm{font-family:Fraunces,"Iowan Old Style",Georgia,serif; font-weight:600; font-size:16px}
 .wk-card .rate{font-family:"IBM Plex Mono",monospace; font-size:22px; font-weight:600;
   line-height:1.15}
 .wk-card .sub{font-size:12.5px; color:var(--ink-3)}
@@ -302,20 +864,47 @@ footer p{margin:0 0 11px}
 
 <div class="wrap">
 <header class="top">
+  <svg class="contours" id="contours" aria-hidden="true"></svg>
   <p class="eyebrow">Private Water Fishing &middot; member report archive</p>
   <h1>Private Water Pattern Book</h1>
-  <p class="lede">Every fishing report the club's members have written, read by rule
-  and joined to the weather each trip was actually fished under. Built to answer one
-  question: on small, clear, grassy water, what actually works?</p>
+  <p class="lede">Thirteen thousand member reports, read by rule and joined to the
+  weather each trip was fished under, pointed at one question: which lake is worth
+  booking, and what goes in the boat. Every figure below opens onto the trips it
+  came from.</p>
   <p class="provenance" id="prov"></p>
 </header>
 
 <div id="index">
+
+<section id="planner">
+  <div class="daybar" id="daybar"></div>
+  <p class="wx" id="wx"></p>
+  <p class="note" id="plan-note"></p>
+
+  <div class="plan-grid">
+    <div>
+      <div style="overflow-x:auto"><table class="short" id="short"></table></div>
+      <div class="brief" id="brief"></div>
+    </div>
+    <div class="maprail">
+      <div class="mapbox" id="mapbox"></div>
+      <div class="scat" id="scat"></div>
+    </div>
+  </div>
+</section>
+
+<hr class="lateral">
+
+<div class="archive-head">
+  <h2>The archive behind it</h2>
+  <span class="tn">every number above comes from here</span>
+</div>
+
 <div class="kpis" id="kpis"></div>
 <p class="caveat" id="caveat"></p>
 
 <section>
-  <div class="shead"><h2 id="wk-title">This weekend</h2></div>
+  <div class="shead"><h2 id="wk-title">Ranked for the weekend</h2></div>
   <p class="note" id="wk-note"></p>
   <div class="wk" id="weekend"></div>
 </section>

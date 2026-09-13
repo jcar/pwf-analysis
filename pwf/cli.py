@@ -660,6 +660,127 @@ def plan(lake: str = typer.Option(..., help="Lake name"),
 
 
 @app.command()
+def brief(lake: str = typer.Option(..., help="Lake name"),
+          when: str = typer.Option(None, "--date", help="YYYY-MM-DD"),
+          evidence: bool = typer.Option(False, help="Print the cited reports")):
+    """The plan for one lake on one day, with the evidence behind it."""
+    from datetime import date as _date
+
+    from .brief import next_weekend, report_url, trip_brief
+
+    conn = _db()
+    target = _date.fromisoformat(when) if when else next_weekend()[0]
+
+    # One forecast call covers every grid cell the club occupies.
+    fc = {}
+    row = conn.execute("SELECT lat, lon FROM lakes WHERE lower(name)=?",
+                       (lake.lower(),)).fetchone()
+    if row and row["lat"] is not None:
+        from .recommend import fetch_forecast
+        from .weather import grid_key
+        try:
+            cell = grid_key(row["lat"], row["lon"])
+            fc = fetch_forecast([cell]).get(cell, {}).get(target.isoformat(), {})
+        except Exception:
+            fc = {}
+    b = trip_brief(conn, lake, target, forecast=fc)
+    if "error" in b:
+        console.print(f"[red]{b['error']}[/red]  Try `pwf lakes`.")
+        raise typer.Exit(1)
+
+    f, ex, exp = b["facts"], b["expected"], b["expect"]
+    console.print(f"\n[bold]{b['lake']}[/bold] — {b['weekday']} {b['date']}")
+    bits = []
+    if f["miles"] is not None:
+        bits.append(f"{f['miles']:.0f} mi from Dallas")
+    if f["day_rate"]:
+        bits.append(f"${f['day_rate']:.0f}/day")
+    if f["acres"]:
+        bits.append(f"{f['acres']:.0f} acres")
+    if f["cohort"]:
+        bits.append(f["cohort"].replace("_", " "))
+    console.print("  " + "  ·  ".join(bits))
+
+    console.rule("[bold]Expect[/bold]", style="dim")
+    console.print(
+        f"[bold]{_fmt(ex['fph'])} fish/hr[/bold] expected for {ex['month_name']} "
+        f"(club average {ex['club_month_mean']}), from "
+        f"{'this lake in this month' if ex['basis'] == 'lake-month' else 'its year-round average'}"
+        f" over {ex['n_total']} scored trips.")
+    if exp.get("sentence"):
+        console.print(exp["sentence"], width=88)
+    console.print(f"[dim]{exp['caveat']}[/dim]", width=88)
+
+    cond = b["conditions"]
+    if cond.get("forecast"):
+        fc = cond["forecast"]
+        console.rule("[bold]Conditions[/bold]", style="dim")
+        console.print(
+            f"{_fmt(fc.get('temp_max_f'), 0)}°F high · "
+            f"{_fmt(fc.get('wind_max_mph'), 0)} mph · "
+            f"{fc.get('cloud_pct')}% cloud · {fc.get('pressure_trend') or '?'} pressure")
+        if cond.get("note"):
+            console.print(f"[yellow]{cond['note']}[/yellow]", width=88)
+        console.print("[dim]Shown to plan around, not scored: measured weather "
+                      "effects in this archive sit inside noise.[/dim]", width=88)
+
+    plan = b["plan"]
+    pres = plan["presentation"]
+    console.rule("[bold]The plan[/bold]", style="dim")
+    if pres.get("use"):
+        console.print("[bold]Presentation first[/bold] — it measures larger than bait choice.")
+        for u in pres["use"]:
+            here = ""
+            if u["here"]:
+                d = u["here"]["diff"]
+                here = (f"   [dim](here {d:+.2f} over {u['here']['trips']} trips"
+                        f"{' — against the club pattern' if d < 0 else ''})[/dim]")
+            console.print(
+                f"  · [bold]{u['label']}[/bold]  {u['diff']:+.2f} fish/hr "
+                f"[{u['lo']:+.2f}, {u['hi']:+.2f}], {u['years_agreeing']}/{u['years']} "
+                f"years agree{here}")
+    if pres.get("avoid"):
+        console.print("  Leave alone: " + ", ".join(
+            f"{a['label']} ({a['diff']:+.2f})" for a in pres["avoid"]))
+
+    baits = plan["baits"]
+    console.print(f"\n[bold]Baits[/bold] — {baits.get('lead')}.")
+    for key, label in (("backed", "backed"), ("suggestive", "leaning")):
+        for e in (baits.get(key) or [])[:3]:
+            flag = " †" if e.get("club_unstable") else ""
+            console.print(
+                f"  · [bold]{e['bait'].replace('_', ' ')}[/bold]{flag}  "
+                f"{e['diff']:+.2f} fish/hr [{e['lo']:+.2f}, {e['hi']:+.2f}] "
+                f"over {e['trips']} trips  [dim]({label})[/dim]")
+    if baits.get("below"):
+        console.print("  Skip: " + ", ".join(
+            f"{e['bait'].replace('_', ' ')} ({e['diff']:+.2f})"
+            for e in baits["below"][:3]))
+
+    if plan.get("where"):
+        console.print("\n[bold]Where[/bold] — members name " + ", ".join(
+            f"{w['value'].replace('_', ' ')} ({w['n']})" for w in plan["where"]))
+    if plan.get("vegetation"):
+        console.print("  growth: " + ", ".join(
+            f"{v['value'].replace('_', ' ')} ({v['n']})" for v in plan["vegetation"]))
+    console.print(f"\n[dim]{plan['slot_note']}[/dim]", width=88)
+
+    if evidence:
+        console.rule("[bold]The receipts[/bold]", style="dim")
+        for bait, cites in b["citations"].items():
+            if not cites:
+                continue
+            console.print(f"[bold]{bait.replace('_', ' ')}[/bold] — most recent trips:")
+            for rid, when_, fish in cites[:6]:
+                console.print(f"   {when_}  {str(fish) + ' fish' if fish is not None else 'no count':<10} "
+                              f"[dim]{report_url(rid)}[/dim]")
+    else:
+        n = sum(len(v) for v in b["citations"].values())
+        console.print(f"\n[dim]{n} trips cited behind these numbers — "
+                      f"add --evidence for the links.[/dim]")
+
+
+@app.command()
 def compare(lakes_csv: str = typer.Argument(..., help="Comma-separated lake names")):
     """Compare lakes side by side."""
     conn = _db()

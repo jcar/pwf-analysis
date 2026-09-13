@@ -40,7 +40,8 @@ def collect(conn: sqlite3.Connection) -> dict:
     # one-day error destroys a pressure reading, so they are excluded here.
     exact = scored[scored["trip_date_source"] == "reservation"]
 
-    out: dict = {"technique_club": _technique_club(conn, trips, lures),
+    out: dict = {"planner": _planner(conn, trips, lures),
+                 "technique_club": _technique_club(conn, trips, lures),
                  "profiles": _profiles(conn, trips, lures),
                  "weekend": _weekend(conn),
                  "headline": _headline(conn, trips, scored),
@@ -276,3 +277,96 @@ def _technique_club(conn, trips, lures) -> dict:
         return {}
     keep = [e for e in ev if e["support"] != "thin"][:14]
     return {"effects": keep, "summary": summary(keep)}
+
+
+def _planner(conn, trips, lures) -> dict:
+    """The booking decision: a shortlist per day, the map, and a brief each.
+
+    Built without a live forecast call for the shortlist itself - the ranking
+    never used one - but the brief carries the day's forecast, fetched once for
+    every grid cell the club occupies.
+    """
+    from pwf.brief import next_weekend, shortlist_briefs
+    from pwf.consistency import club_bust_rate, lake_consistency
+    from pwf.recommend import fetch_forecast, recommend
+    from pwf.technique import technique_effects
+    from pwf.baits import club_stability
+    from pwf.weather import grid_key
+
+    from .mapview import build_map
+
+    from pwf import analysis as _A
+
+    sat, sun = next_weekend()
+    shared = {
+        "trips": trips, "lures": lures, "tags": _A.tags_frame(conn),
+        "club_tech": technique_effects(trips, _A.tags_frame(conn), lures),
+        "bait_stab": club_stability(trips, lures),
+    }
+    cons = lake_consistency(trips)
+    cons["__club_bust__"] = club_bust_rate(trips)
+    shared["consistency"] = cons
+
+    # Every lake with coordinates, so the shortlist is seen in context.
+    all_lakes = [dict(r) for r in conn.execute(
+        "SELECT name, lat, lon FROM lakes"
+        " WHERE lat IS NOT NULL AND report_count > 0")]
+
+    forecasts = {}
+    try:
+        cells = sorted({grid_key(lk["lat"], lk["lon"]) for lk in all_lakes})
+        forecasts = fetch_forecast(cells)
+    except Exception:
+        forecasts = {}
+
+    coords = {lk["name"]: (lk["lat"], lk["lon"]) for lk in all_lakes}
+    days = {}
+    for day in (sat, sun):
+        rec = recommend(conn, when=day, max_miles=200, limit=12,
+                        with_forecast=False)
+        rows = rec.get("lakes", [])
+        briefs = {}
+        for row in rows:
+            latlon = coords.get(row["lake"])
+            fc = {}
+            if latlon and forecasts:
+                fc = forecasts.get(grid_key(*latlon), {}).get(day.isoformat(), {})
+            b = shortlist_briefs(conn, day, [row["lake"]], forecast=fc, **shared)
+            for name, brief in b.items():
+                briefs[name] = _slim_brief(brief)
+        days[day.isoformat()] = {
+            "weekday": day.strftime("%A"),
+            "month_name": rec.get("month_name"),
+            "considered": rec.get("considered"),
+            "club_month_mean": rec.get("club_month_mean"),
+            "max_miles": rec.get("max_miles"),
+            "shortlist": rows,
+            "briefs": briefs,
+        }
+
+    # The map ships once; only the shortlist highlighting changes per day.
+    ranked = {r["lake"]: i + 1 for i, r in
+              enumerate(days[sat.isoformat()]["shortlist"])}
+    rate = {r["lake"]: r["expected_fph"] for r in
+            days[sat.isoformat()]["shortlist"]}
+    miles = {r["lake"]: r["miles"] for r in days[sat.isoformat()]["shortlist"]}
+    for lk in all_lakes:
+        lk["rank"] = ranked.get(lk["name"])
+        lk["expected_fph"] = rate.get(lk["name"])
+        lk["miles"] = miles.get(lk["name"])
+
+    return {"days": days, "default_day": sat.isoformat(),
+            "map": build_map(all_lakes),
+            "report_url": "https://www.privatewaterfishing.com/forums/view_report/"}
+
+
+def _slim_brief(b: dict) -> dict:
+    """Keep only what the planner adds.
+
+    Facts, the month curve, the water panel and the narrative summary all live
+    in `profiles` already, keyed by the same lake name, so the page looks them
+    up rather than shipping a second copy per day.
+    """
+    return {k: b[k] for k in
+            ("lake", "date", "weekday", "expected", "expect", "conditions",
+             "plan", "citations") if k in b}

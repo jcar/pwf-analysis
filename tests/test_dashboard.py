@@ -113,3 +113,103 @@ class TestProfiles:
         d = _payload(_page())
         for L in d["weekend"]["lakes"]:
             assert "forecast" not in L
+
+
+class TestPlanner:
+    """The page is now a booking tool with the archive beneath it. Both halves
+    have to survive."""
+
+    def test_planner_payload_present(self):
+        d = _payload(_page())
+        p = d.get("planner")
+        assert p, "no planner payload"
+        assert p["days"] and p["default_day"] in p["days"]
+        day = p["days"][p["default_day"]]
+        assert day["shortlist"] and day["briefs"]
+
+    def test_every_shortlisted_lake_has_a_brief(self):
+        d = _payload(_page())
+        for key, day in d["planner"]["days"].items():
+            for row in day["shortlist"]:
+                assert row["lake"] in day["briefs"], f"{key}: {row['lake']}"
+
+    def test_map_ships_with_the_page(self):
+        m = _payload(_page())["planner"]["map"]
+        assert m["states"] and m["rings"] and m["lakes"]
+        for mark in m["lakes"]:
+            assert 0 <= mark["x"] <= m["width"]
+            assert 0 <= mark["y"] <= m["height"]
+
+    def test_no_tile_or_external_map_dependency(self):
+        """A tile map would fail silently under the artifact's content policy,
+        so the map must be self-contained geometry."""
+        html = _page()
+        for host in ("tile.openstreetmap", "maps.googleapis", "api.mapbox",
+                     "leaflet", "unpkg.com"):
+            assert host not in html.lower(), f"{host} would be blocked"
+
+    def test_archive_survives_below_the_planner(self):
+        html = _page()
+        for marker in ("The archive behind it", "Bait by month", "The lakes",
+                       "How to read this"):
+            assert marker in html
+        # the planner must come first in the document
+        assert html.index('id="planner"') < html.index("The archive behind it")
+
+    def test_citations_link_to_the_club_site(self):
+        d = _payload(_page())
+        assert d["planner"]["report_url"].startswith(
+            "https://www.privatewaterfishing.com/forums/view_report/")
+        day = d["planner"]["days"][d["planner"]["default_day"]]
+        cited = sum(len(v) for b in day["briefs"].values()
+                    for v in b["citations"].values())
+        assert cited > 0, "no receipts shipped"
+
+    def test_evidence_drawers_are_native_details(self):
+        """`<details>` so the evidence opens without JavaScript and is
+        keyboard-reachable."""
+        html = _page()
+        assert 'el("details", "ev")' in html or "<details" in html
+
+    def test_theme_is_the_bass_palette(self):
+        html = _page()
+        assert "#f4f2e9" in html and "#7a5f1c" in html, "light palette missing"
+        assert "#141811" in html and "#d4ae4a" in html, "dark palette missing"
+        assert "family=Fraunces" in html
+
+
+class TestPageActuallyRuns:
+    """`node --check` only parses. It passed while the map was broken by a
+    chained `append()` — Node.append returns undefined — which would have left
+    the map blank. This executes the render paths against a DOM stub instead."""
+
+    def test_render_paths_execute_without_error(self):
+        import shutil
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        if not shutil.which("node"):
+            pytest.skip("node not available")
+        stub = Path("tests/support/domstub.js")
+        if not stub.exists():
+            pytest.skip("dom stub missing")
+
+        html = _page()
+        m = re.search(r"(?s)<script>(.*)</script>", html)
+        assert m, "no script block"
+        src = (stub.read_text() + "\n" + m.group(1)
+               + "\nif (globalThis.__made.length < 50) "
+                 "{ throw new Error('render produced almost nothing'); }"
+               + "\nconsole.log('ok', globalThis.__made.length);")
+        with tempfile.NamedTemporaryFile("w", suffix=".mjs", delete=False,
+                                         encoding="utf-8") as f:
+            f.write(src)
+            path = f.name
+        try:
+            r = subprocess.run(["node", path], capture_output=True, text=True,
+                               timeout=120)
+            assert r.returncode == 0, f"page JS threw at runtime:\n{r.stderr[:2000]}"
+            assert "ok" in r.stdout
+        finally:
+            Path(path).unlink(missing_ok=True)
