@@ -131,10 +131,12 @@ def lakes(cohort: str = typer.Option(None), min_trips: int = typer.Option(20),
 @app.command()
 def lake(name: str, season: str = typer.Option(None, help="Show baits for one season")):
     """Full profile for one lake - everything worth knowing before a trip."""
+    from .config import DB_PATH
     from .profile import lake_profile
+    from .summarize import mention_index
 
     conn = _db()
-    p = lake_profile(conn, name)
+    p = lake_profile(conn, name, mentions=mention_index(conn, str(DB_PATH)))
     if "error" in p:
         console.print(f"[red]{p['error']}[/red]  Try `pwf lakes`.")
         raise typer.Exit(1)
@@ -175,6 +177,19 @@ def lake(name: str, season: str = typer.Option(None, help="Show baits for one se
         f"best fish {_fmt(fish['best_lb'], 1)} lb  ·  "
         f"{_fmt(fish['over_5lb_rate'], 0)}% of trips reporting a size had a 5 lb+ "
         f"[dim](n={fish['weight_reports']})[/dim]")
+
+    summ = p.get("summary") or {}
+    if summ.get("paragraphs"):
+        console.print()
+        console.rule("[bold]What members are saying[/bold]", style="dim")
+        for para in summ["paragraphs"]:
+            console.print(para, width=88)
+            console.print()
+        if summ.get("mention_line"):
+            console.print(f"[italic]{summ['mention_line']}[/italic]", width=88)
+        if summ.get("caveat"):
+            console.print(f"[yellow]{summ['caveat']}[/yellow]", width=88)
+        console.rule(style="dim")
 
     months = [m for m in p["by_month"] if m["n"]]
     if months:

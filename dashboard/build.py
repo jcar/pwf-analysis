@@ -224,6 +224,16 @@ body.profile-open #profile{display:block}
 .p-stat .v{font-family:"IBM Plex Mono",monospace; font-size:26px; font-weight:600;
   line-height:1.1}
 .p-stat .k{font-size:12px; color:var(--ink-3); margin-top:3px}
+.summary{margin:0 0 30px; max-width:78ch}
+.summary h3{font-size:13px; font-weight:600; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-3); font-family:"Source Sans 3",sans-serif;
+  margin-bottom:12px}
+.summary p{margin:0 0 12px; font-size:15.5px; line-height:1.62; color:var(--ink)}
+.summary .mentions{font-size:14px; color:var(--ink-2); border-left:3px solid var(--accent);
+  padding:10px 0 10px 14px; background:var(--accent-soft); margin-top:4px}
+.summary .mentions b{color:var(--ink); font-weight:600}
+.summary .caveat-line{font-size:13.5px; color:var(--ink-2); margin-top:12px;
+  padding-top:10px; border-top:1px solid var(--rule)}
 .p-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(288px,1fr)); gap:30px}
 .p-block h3{margin-bottom:4px}
 .p-block .cap{font-size:12.5px; color:var(--ink-3); margin:0 0 12px}
@@ -604,6 +614,24 @@ function renderProfile(name) {
   });
   head.append(lead);
   host.append(head);
+
+  const summ = p.summary || {};
+  if (summ.paragraphs && summ.paragraphs.length) {
+    const box = el("div", "summary");
+    box.append(el("h3", null, "What members are saying"));
+    summ.paragraphs.forEach(t => box.append(el("p", null, t)));
+    if (summ.mentions && summ.mentions.length) {
+      const m = el("div", "mentions");
+      m.innerHTML = "Brought up here far more than at other club lakes: " +
+        summ.mentions.map(x =>
+          `<b>${x.phrase}</b> <span title="${x.reports} of ${x.of} reports">` +
+          `(${x.reports})</span>`).join(", ") +
+        ". Counted across reports, never quoted from one.";
+      box.append(m);
+    }
+    if (summ.caveat) box.append(el("div", "caveat-line", summ.caveat));
+    host.append(box);
+  }
 
   const grid = el("div", "p-grid");
 

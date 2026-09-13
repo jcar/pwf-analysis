@@ -68,9 +68,13 @@ def _counts(series: pd.Series, total: int, top: int = 8) -> list[dict]:
 
 def lake_profile(conn: sqlite3.Connection, lake: str,
                  trips: pd.DataFrame | None = None,
-                 lures: pd.DataFrame | None = None) -> dict:
-    """Assemble one lake's profile. Frames may be passed in to avoid re-querying
-    when profiling every lake at once."""
+                 lures: pd.DataFrame | None = None,
+                 mentions: dict | None = None) -> dict:
+    """Assemble one lake's profile.
+
+    Frames and the mention index may be passed in to avoid rebuilding them when
+    profiling every lake at once.
+    """
     trips = A.trips_frame(conn) if trips is None else trips
     lures = A.lures_frame(conn) if lures is None else lures
     if trips.empty:
@@ -86,7 +90,7 @@ def lake_profile(conn: sqlite3.Connection, lake: str,
     ids = set(sel["report_id"])
     first = sel.iloc[0]
 
-    return {
+    prof = {
         "lake": first["lake"],
         "facts": _facts(conn, first, sel),
         "volume": {
@@ -106,6 +110,16 @@ def lake_profile(conn: sqlite3.Connection, lake: str,
         "fish": _fish(conn, sel, ids),
         "conditions": _conditions(scored),
     }
+    prof["summary"] = _summary(prof, first["lake"], mentions)
+    return prof
+
+
+def _summary(prof: dict, lake: str, mentions: dict | None) -> dict:
+    """Narrated statistics plus, when a mention index is supplied, the phrases
+    this lake's reports carry far more often than the club's."""
+    from .summarize import distinctive_mentions, summarize
+    picks = distinctive_mentions(mentions, lake) if mentions else []
+    return summarize(prof, picks)
 
 
 def _facts(conn, first, sel) -> dict:
@@ -305,15 +319,20 @@ def _conditions(scored) -> dict:
 
 def all_profiles(conn: sqlite3.Connection, min_reports: int = 8) -> dict[str, dict]:
     """Every lake worth profiling, sharing one pass over the frames."""
+    from .config import DB_PATH
+    from .summarize import mention_index
+
     trips = A.trips_frame(conn)
     lures = A.lures_frame(conn)
     if trips.empty:
         return {}
+    mentions = mention_index(conn, str(DB_PATH))
     counts = trips[trips["lake_known"] == 1]["lake"].value_counts()
     names = [n for n, c in counts.items() if c >= min_reports]
     out = {}
     for name in names:
-        prof = lake_profile(conn, name, trips=trips, lures=lures)
+        prof = lake_profile(conn, name, trips=trips, lures=lures,
+                            mentions=mentions)
         if "error" not in prof:
             out[name] = prof
     return out
