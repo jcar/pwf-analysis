@@ -165,6 +165,10 @@ def lake(name: str):
     if len(s["structure"]):
         console.print("cover: " + ", ".join(
             f"{k} ({v})" for k, v in s["structure"].head(8).items()))
+    if len(s["species"]):
+        console.print("species named: " + ", ".join(
+            f"{k} ({int(v)})" for k, v in s["species"].head(6).items())
+            + "  [dim](only where a member named one)[/dim]")
 
 
 @app.command()

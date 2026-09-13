@@ -175,7 +175,26 @@ def lake_scorecard(conn: sqlite3.Connection, lake: str) -> dict:
         "vegetation": veg["value"].value_counts(),
         "veg_mention_rate": (veg["report_id"].nunique() / len(sel)) if len(sel) else 0,
         "structure": struct["value"].value_counts(),
+        "species": _species_mix(conn, sel["report_id"]),
     }
+
+
+def _species_mix(conn: sqlite3.Connection, report_ids) -> pd.Series:
+    """Species named on this lake's reports.
+
+    "unspecified" is the largest bucket club-wide - most members just write a
+    number, and on a bass club that number is almost certainly bass. It is left
+    unlabelled rather than silently relabelled, so what shows here is only what
+    somebody actually named.
+    """
+    ids = set(int(r) for r in report_ids)
+    if not ids:
+        return pd.Series(dtype=int)
+    df = pd.read_sql_query("SELECT report_id, species, n FROM catches", conn)
+    df = df[df["report_id"].isin(ids) & (df["species"] != "unspecified")]
+    if df.empty:
+        return pd.Series(dtype=int)
+    return df.groupby("species")["n"].sum().sort_values(ascending=False)
 
 
 def assign_cohorts(conn: sqlite3.Connection) -> pd.DataFrame:
