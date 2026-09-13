@@ -128,6 +128,74 @@ def lakes(cohort: str = typer.Option(None), min_trips: int = typer.Option(20),
             for i, r in g.iterrows()])
 
 
+_SUPPORT_STYLE = {
+    "backed": ("bold green", "Backed by the data"),
+    "suggestive": ("yellow", "Leaning that way, not proven"),
+    "unproven": ("dim", "Thrown here, but not separated from the rest"),
+    "below": ("red", "Below the lake's other baits"),
+    "thin": ("dim", "Too few trips to say"),
+}
+
+
+def _render_baits(baits: dict) -> None:
+    """Group baits by how much the archive supports them, with the interval."""
+    ev = baits.get("evidence") or []
+    rec = baits.get("recommendation") or {}
+    if not ev:
+        return
+
+    console.print()
+    console.rule("[bold]What to throw[/bold]", style="dim")
+    if rec.get("lead"):
+        console.print(f"[bold]{rec['lead']}.[/bold]")
+    console.print(
+        f"[dim]{rec.get('n_compared', len(ev))} baits compared. Each is measured "
+        f"against the other baits on trips that named about as many, because "
+        f"trips listing more baits catch more fish and would otherwise flatter "
+        f"every bait at once.[/dim]\n")
+
+    for key in ("backed", "suggestive", "unproven", "below", "thin"):
+        group = rec.get(key) or []
+        if not group:
+            continue
+        style, label = _SUPPORT_STYLE[key]
+        rows = []
+        for e in group[:8]:
+            ci = (f"[{e['lo']:+.2f}, {e['hi']:+.2f}]"
+                  if e["lo"] is not None else "-")
+            diff = f"{e['diff']:+.2f}" if e["diff"] is not None else "-"
+            rows.append([e["bait"].replace("_", " "), e["trips"],
+                         f"{e['share']:.0f}%", _fmt(e["rate"]), diff, ci])
+        _table(label, ["bait", "trips", "share", "fish/hr", "vs others", "95% CI"],
+               rows)
+        # Supporting detail for the ones worth acting on.
+        for e in group[:3]:
+            d = e.get("detail") or {}
+            bits = []
+            if d.get("subtypes"):
+                bits.append("mostly " + ", ".join(
+                    f"{x['value'].replace('_',' ')} ({x['n']})" for x in d["subtypes"][:3]))
+            if d.get("by_season"):
+                best = max(d["by_season"].items(), key=lambda kv: kv[1]["rate"] or 0)
+                bits.append(f"strongest in {best[0]} ({best[1]['rate']} fish/hr "
+                            f"over {best[1]['n']} trips)")
+            if d.get("colors"):
+                bits.append("colours named: " + ", ".join(
+                    x["value"] for x in d["colors"][:3]))
+            if bits:
+                console.print(f"   [dim]{e['bait'].replace('_',' ')}: "
+                              f"{'; '.join(bits)}[/dim]")
+
+    seasons = baits.get("by_season") or {}
+    if seasons:
+        line = "  ·  ".join(f"{sea}: {rows[0]['bait'].replace('_',' ')} ({rows[0]['n']})"
+                            for sea, rows in seasons.items() if rows)
+        if line:
+            console.print(f"\n[dim]Plain season leaders (thin samples, unstratified) "
+                          f"- {line}[/dim]")
+    console.rule(style="dim")
+
+
 @app.command()
 def lake(name: str, season: str = typer.Option(None, help="Show baits for one season")):
     """Full profile for one lake - everything worth knowing before a trip."""
@@ -209,20 +277,17 @@ def lake(name: str, season: str = typer.Option(None, help="Show baits for one se
                [[y["year"], y["n"], _fmt(y["median"])] for y in yrs])
 
     baits = p["baits"]
-    chosen = baits["by_season"].get(season) if season else baits["overall"]
-    if chosen:
-        _table(f"Producing baits{f' - {season}' if season else ''}",
-               ["bait", "trips", "fish/hr", "vs lake baseline"],
-               [[b["bait"], b["n"], _fmt(b["fph"]), f"{b['lift']:.2f}x"]
-                for b in chosen[:10]],
-               caption="ranked conservatively; thin cells sink. Association, not cause.")
-    if not season and baits["by_season"]:
-        line = []
-        for sea, rows in baits["by_season"].items():
-            if rows:
-                line.append(f"{sea}: {rows[0]['bait']} ({rows[0]['n']})")
-        if line:
-            console.print("best by season - " + "  ·  ".join(line))
+    if season:
+        chosen = baits["by_season"].get(season) or []
+        if chosen:
+            _table(f"Producing baits - {season}",
+                   ["bait", "trips", "fish/hr", "vs lake baseline"],
+                   [[b["bait"], b["n"], _fmt(b["fph"]), f"{b['lift']:.2f}x"]
+                    for b in chosen[:10]],
+                   caption="season slices are too thin to match on trip detail, "
+                           "so these are plain comparisons - read them loosely.")
+    else:
+        _render_baits(baits)
 
     w = p["water"]
     console.print(

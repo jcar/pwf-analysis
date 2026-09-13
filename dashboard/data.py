@@ -224,8 +224,10 @@ def _slim(prof: dict) -> dict:
     baits = prof["baits"]
     prof["baits"] = {
         "overall": baits["overall"][:8],
-        "subtype": baits["subtype"][:8],
         "by_season": {k: v[:4] for k, v in baits["by_season"].items()},
+        "evidence": baits.get("evidence", [])[:12],
+        "recommendation": {k: (v[:6] if isinstance(v, list) else v)
+                           for k, v in (baits.get("recommendation") or {}).items()},
     }
     w = prof["water"]
     for key, keep in (("vegetation", 6), ("structure", 7), ("technique", 6),

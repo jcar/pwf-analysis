@@ -281,28 +281,32 @@ def _water_sentence(profile) -> str | None:
 
 
 def _bait_sentence(profile) -> str | None:
-    baits = profile["baits"]["overall"]
-    if not baits:
+    """Lead with what the archive actually separates, not with everything that
+    happened to score above average."""
+    baits = profile["baits"]
+    ev = baits.get("evidence") or []
+    if not ev:
         return None
-    up = [b for b in baits if b["lift"] and b["lift"] >= 1.05][:3]
-    down = [b for b in baits if b["lift"] and b["lift"] <= 0.92][-2:]
-    parts = []
-    if up:
-        parts.append("above this lake's own baseline: " + ", ".join(
-            f"{b['bait'].replace('_', ' ')} ({b['lift']:.2f}x over {b['n']} trips)"
-            for b in up))
-    if down:
-        parts.append("below it: " + ", ".join(
-            f"{b['bait'].replace('_', ' ')} ({b['lift']:.2f}x)" for b in down))
-    if not parts:
-        return None
-    seasons = profile["baits"].get("by_season") or {}
-    tail = ""
-    if seasons:
-        tail = (" By season, the leader is "
-                + ", ".join(f"{s} {r[0]['bait'].replace('_', ' ')}"
-                            for s, r in seasons.items() if r) + ".")
-    return "Baits have run " + "; ".join(parts) + "." + tail
+
+    backed = [e for e in ev if e["support"] == "backed"]
+    below = [e for e in ev if e["support"] == "below"]
+
+    def phrase(e):
+        return (f"{e['bait'].replace('_', ' ')} ({e['diff']:+.2f} fish an hour "
+                f"over {e['trips']} trips)")
+
+    if backed:
+        s = ("Matched against the other baits on comparably detailed trips, "
+             + " and ".join(phrase(e) for e in backed[:2])
+             + (" stands out." if len(backed) == 1 else " stand out."))
+    else:
+        s = (f"No bait here separates from the others once trips are matched on "
+             f"how much they described — across {len(ev)} baits compared, every "
+             f"interval crosses zero.")
+    if below:
+        s += (" Running behind: "
+              + ", ".join(e["bait"].replace("_", " ") for e in below[:2]) + ".")
+    return s
 
 
 def _technique_sentence(profile) -> str | None:

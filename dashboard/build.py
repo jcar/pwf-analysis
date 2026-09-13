@@ -234,6 +234,34 @@ body.profile-open #profile{display:block}
 .summary .mentions b{color:var(--ink); font-weight:600}
 .summary .caveat-line{font-size:13.5px; color:var(--ink-2); margin-top:12px;
   padding-top:10px; border-top:1px solid var(--rule)}
+.ev{display:grid; gap:16px}
+.ev-group{border:1px solid var(--rule); background:var(--surface)}
+.ev-group.is-backed{border-color:var(--accent); box-shadow:inset 3px 0 0 var(--accent)}
+.ev-group.is-below{box-shadow:inset 3px 0 0 var(--d3)}
+.ev-head{display:flex; align-items:baseline; justify-content:space-between;
+  gap:12px; padding:10px 14px; border-bottom:1px solid var(--rule);
+  background:var(--surface-2)}
+.ev-head .t{font-size:12px; font-weight:600; letter-spacing:.07em;
+  text-transform:uppercase; color:var(--ink-2)}
+.ev-head .c{font-size:12px; color:var(--ink-3)}
+.ev-row{display:grid; grid-template-columns:1fr auto auto; gap:4px 12px;
+  padding:9px 14px; border-bottom:1px solid var(--rule); align-items:center}
+.ev-row:last-child{border-bottom:none}
+.ev-row .nm{font-size:14px; font-weight:500}
+.ev-row .d{font-family:"IBM Plex Mono",monospace; font-size:13.5px;
+  font-variant-numeric:tabular-nums; font-weight:600}
+.ev-row .n{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-3)}
+.ev-row .ci{grid-column:1/-1; display:flex; align-items:center; gap:9px;
+  font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--ink-3)}
+.ci-track{position:relative; flex:1; height:9px; background:var(--surface-3);
+  min-width:90px}
+.ci-track .zero{position:absolute; top:-2px; bottom:-2px; width:1px;
+  background:var(--rule-strong)}
+.ci-track .span{position:absolute; top:2px; height:5px; border-radius:3px}
+.ci-track .pt{position:absolute; top:0; width:3px; height:9px; background:var(--ink)}
+.ev-row .dt{grid-column:1/-1; font-size:12.5px; color:var(--ink-2); margin-top:2px}
+.ev-lead{font-size:15.5px; line-height:1.6; margin:0 0 6px}
+.ev-note{font-size:12.5px; color:var(--ink-3); margin:0 0 14px; max-width:74ch}
 .p-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(288px,1fr)); gap:30px}
 .p-block h3{margin-bottom:4px}
 .p-block .cap{font-size:12.5px; color:var(--ink-3); margin:0 0 12px}
@@ -577,6 +605,85 @@ function pills(items) {
   return row;
 }
 
+const SUPPORT_LABEL = {
+  backed: ["Backed by the data", "is-backed"],
+  suggestive: ["Leaning that way, not proven", ""],
+  unproven: ["Thrown here, but not separated from the rest", ""],
+  below: ["Below the lake's other baits", "is-below"],
+  thin: ["Too few trips to say", ""],
+};
+
+function ciBar(e, scale) {
+  const wrap = el("div", "ci");
+  const track = el("div", "ci-track");
+  const pos = v => ((v + scale) / (2 * scale)) * 100;
+  const zero = el("div", "zero"); zero.style.left = pos(0) + "%";
+  const span = el("div", "span");
+  const lo = Math.max(-scale, e.lo), hi = Math.min(scale, e.hi);
+  span.style.left = pos(lo) + "%";
+  span.style.width = Math.max(1.5, pos(hi) - pos(lo)) + "%";
+  span.style.background = e.lo > 0 ? "var(--u3)" : e.hi < 0 ? "var(--d3)" : "var(--surface-3)";
+  span.style.outline = "1px solid var(--rule-strong)";
+  const pt = el("div", "pt"); pt.style.left = pos(e.diff) + "%";
+  track.append(span, zero, pt);
+  wrap.append(el("span", null, `${e.lo >= 0 ? "+" : ""}${e.lo.toFixed(2)}`));
+  wrap.append(track);
+  wrap.append(el("span", null, `${e.hi >= 0 ? "+" : ""}${e.hi.toFixed(2)}`));
+  return wrap;
+}
+
+function baitEvidence(baits) {
+  const rec = baits.recommendation || {};
+  const ev = baits.evidence || [];
+  const box = el("div", "p-block");
+  box.append(el("h3", null, "What to throw"));
+  if (rec.lead) box.append(el("p", "ev-lead", rec.lead + "."));
+  box.append(el("p", "ev-note",
+    `${rec.n_compared || ev.length} baits compared. Each is measured against the ` +
+    `other baits on trips that named about as many, because trips listing more ` +
+    `baits catch more fish and would otherwise flatter every bait at once. The ` +
+    `bar shows the 95% interval; where it crosses zero, the archive cannot tell ` +
+    `that bait apart from the rest.`));
+
+  const scale = Math.max(1, ...ev.filter(e => e.hi != null)
+    .map(e => Math.max(Math.abs(e.lo), Math.abs(e.hi))));
+  const wrap = el("div", "ev");
+  ["backed", "suggestive", "unproven", "below", "thin"].forEach(key => {
+    const group = rec[key] || [];
+    if (!group.length) return;
+    const [label, cls] = SUPPORT_LABEL[key];
+    const g = el("div", "ev-group" + (cls ? " " + cls : ""));
+    const head = el("div", "ev-head");
+    head.append(el("div", "t", label), el("div", "c", group.length + " of " + ev.length));
+    g.append(head);
+    group.forEach(e => {
+      const row = el("div", "ev-row");
+      row.append(el("div", "nm", baitName(e.bait)));
+      const d = el("div", "d", e.diff == null ? "–"
+        : `${e.diff >= 0 ? "+" : ""}${e.diff.toFixed(2)} fish/hr`);
+      d.style.color = e.lo > 0 ? "var(--u4)" : e.hi < 0 ? "var(--d4)" : "var(--ink-2)";
+      row.append(d);
+      row.append(el("div", "n", `${e.trips} trips · ${e.share}%`));
+      if (e.lo != null) row.append(ciBar(e, scale));
+      const dt = e.detail || {};
+      const bits = [];
+      if ((dt.subtypes || []).length)
+        bits.push("mostly " + dt.subtypes.slice(0, 3)
+          .map(x => `${x.value.replace(/_/g, " ")} (${x.n})`).join(", "));
+      if (dt.by_season && Object.keys(dt.by_season).length) {
+        const best = Object.entries(dt.by_season)
+          .sort((a, b) => (b[1].rate || 0) - (a[1].rate || 0))[0];
+        bits.push(`strongest in ${best[0]} (${best[1].rate} fish/hr over ${best[1].n} trips)`);
+      }
+      if (bits.length) row.append(el("div", "dt", bits.join(" · ")));
+      g.append(row);
+    });
+    wrap.append(g);
+  });
+  box.append(wrap);
+  return box;
+}
+
 function renderProfile(name) {
   const p = D.profiles[name];
   const host = $("#profile");
@@ -632,6 +739,9 @@ function renderProfile(name) {
     if (summ.caveat) box.append(el("div", "caveat-line", summ.caveat));
     host.append(box);
   }
+
+  const baits = p.baits || {};
+  if ((baits.evidence || []).length) host.append(baitEvidence(baits));
 
   const grid = el("div", "p-grid");
 

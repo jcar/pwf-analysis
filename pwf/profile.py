@@ -202,8 +202,16 @@ def _by_year(scored) -> list[dict]:
 
 
 def _baits(sel, mine_lures) -> dict:
-    """Producing baits overall and per season, at both levels of the taxonomy."""
-    out = {"overall": [], "by_season": {}, "subtype": []}
+    """Producing baits, with how much the archive actually backs each one.
+
+    The headline numbers come from `pwf.baits`, which matches a bait against the
+    other baits on equally-documented trips. The plain lift figures are kept
+    alongside for the season breakdown, where samples are too thin to stratify.
+    """
+    from .baits import bait_detail, bait_evidence, recommendation
+
+    out = {"overall": [], "by_season": {}, "subtype": [],
+           "evidence": [], "recommendation": {}}
     if mine_lures.empty:
         return out
 
@@ -221,6 +229,14 @@ def _baits(sel, mine_lures) -> dict:
             got = rows(sl, "category", 3)
             if got:
                 out["by_season"][season] = got[:6]
+
+    evidence = bait_evidence(sel, mine_lures)
+    # Supporting detail only for the baits a reader will actually act on.
+    for e in evidence:
+        if e["support"] in ("backed", "suggestive"):
+            e["detail"] = bait_detail(sel, mine_lures, e["bait"])
+    out["evidence"] = evidence
+    out["recommendation"] = recommendation(evidence)
     return out
 
 
