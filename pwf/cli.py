@@ -726,36 +726,60 @@ def brief(lake: str = typer.Option(..., help="Lake name"),
 
     plan = b["plan"]
     pres = plan["presentation"]
-    console.rule("[bold]The plan[/bold]", style="dim")
+    console.rule("[bold]What to throw[/bold]", style="dim")
+    console.print(
+        "[dim]Everything in this section is measured across the whole archive "
+        "and checked year by year. A single lake's own tackle numbers do not "
+        "survive the same test - see 'at this lake' below.[/dim]", width=88)
+
     if pres.get("use"):
-        console.print("[bold]Presentation first[/bold] — it measures larger than bait choice.")
+        console.print("\n[bold]Presentation[/bold] — it measures larger than bait choice.")
         for u in pres["use"]:
-            here = ""
-            if u["here"]:
-                d = u["here"]["diff"]
-                here = (f"   [dim](here {d:+.2f} over {u['here']['trips']} trips"
-                        f"{' — against the club pattern' if d < 0 else ''})[/dim]")
             console.print(
                 f"  · [bold]{u['label']}[/bold]  {u['diff']:+.2f} fish/hr "
-                f"[{u['lo']:+.2f}, {u['hi']:+.2f}], {u['years_agreeing']}/{u['years']} "
-                f"years agree{here}")
+                f"[{u['lo']:+.2f}, {u['hi']:+.2f}] over {u['trips']} trips, "
+                f"{u['years_agreeing']}/{u['years']} years agree")
     if pres.get("avoid"):
-        console.print("  Leave alone: " + ", ".join(
+        console.print("  Behind the alternatives: " + ", ".join(
             f"{a['label']} ({a['diff']:+.2f})" for a in pres["avoid"]))
 
-    baits = plan["baits"]
-    console.print(f"\n[bold]Baits[/bold] — {baits.get('lead')}.")
-    for key, label in (("backed", "backed"), ("suggestive", "leaning")):
-        for e in (baits.get(key) or [])[:3]:
-            flag = " †" if e.get("club_unstable") else ""
+    cb = plan.get("club_baits") or {}
+    if cb.get("use") or cb.get("avoid"):
+        console.print("\n[bold]Bait family[/bold]")
+        for e in cb.get("use", []):
             console.print(
-                f"  · [bold]{e['bait'].replace('_', ' ')}[/bold]{flag}  "
-                f"{e['diff']:+.2f} fish/hr [{e['lo']:+.2f}, {e['hi']:+.2f}] "
-                f"over {e['trips']} trips  [dim]({label})[/dim]")
-    if baits.get("below"):
-        console.print("  Skip: " + ", ".join(
-            f"{e['bait'].replace('_', ' ')} ({e['diff']:+.2f})"
-            for e in baits["below"][:3]))
+                f"  · [bold]{e['bait'].replace('_', ' ')}[/bold]  {e['diff']:+.2f} "
+                f"fish/hr [{e['lo']:+.2f}, {e['hi']:+.2f}] over {e['trips']} trips")
+        if cb.get("avoid"):
+            console.print("  Behind the alternatives: " + ", ".join(
+                f"{e['bait'].replace('_', ' ')} ({e['diff']:+.2f})"
+                for e in cb["avoid"]))
+
+    here = plan.get("here") or {}
+    if here.get("share"):
+        console.rule(f"[bold]At {b['lake']}[/bold]", style="dim")
+        console.print("[dim]What members actually throw here. Descriptive: this "
+                      "lake's trips say what people tie on, not which bait "
+                      "works better.[/dim]", width=88)
+        console.print("  thrown on: " + ", ".join(
+            f"{x['bait'].replace('_', ' ')} {x['share']}%" for x in here["share"][:6]))
+        if here.get("subtypes"):
+            console.print("  versions named: " + ", ".join(
+                f"{x['value'].replace('_', ' ')} ({x['n']})"
+                for x in here["subtypes"][:5]))
+        if here.get("techniques"):
+            console.print("  presentations named: " + ", ".join(
+                f"{x['value'].replace('_', ' ')} ({x['n']})"
+                for x in here["techniques"][:5]))
+        for u in pres.get("use", []):
+            if u.get("here"):
+                h = u["here"]
+                console.print(
+                    f"  [dim]{u['label']} measured here: {h['diff']:+.2f} over "
+                    f"{h['trips']} trips [{h['lo']:+.2f}, {h['hi']:+.2f}] — "
+                    f"context only, see below[/dim]")
+        if plan.get("lake_reliability"):
+            console.print(f"\n[yellow]{plan['lake_reliability']}[/yellow]", width=88)
 
     if plan.get("where"):
         console.print("\n[bold]Where[/bold] — members name " + ", ".join(

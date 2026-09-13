@@ -20,6 +20,7 @@ import pandas as pd
 from . import analysis as A
 from .baits import bait_evidence, club_stability, recommendation
 from .consistency import CAVEAT, club_bust_rate, describe, lake_consistency
+from .reliability import CAVEAT as RELIABILITY
 from .profile import lake_profile, miles_from_home
 from .recommend import _expected_rate, _next_saturday, describe_forecast
 from .technique import summary as tech_summary
@@ -121,6 +122,7 @@ def trip_brief(conn: sqlite3.Connection, lake: str, when: date | None = None,
         consistency = lake_consistency(trips)
     if club_tech is None:
         club_tech = technique_effects(trips, tags, lures)
+    club_baits = bait_evidence(trips, lures, min_trips=60, stability=bait_stab)
 
     prof = lake_profile(conn, name, trips=trips, lures=lures,
                         club_technique=club_tech, consistency=consistency,
@@ -172,7 +174,10 @@ def trip_brief(conn: sqlite3.Connection, lake: str, when: date | None = None,
         "conditions": {"forecast": fc or None, "note": _conditions_note(fc)},
         "plan": {
             "presentation": _presentation_plan(club_tech, lake_tech),
+            "club_baits": _club_bait_plan(club_baits),
+            "here": _what_they_throw(sel_all, mine_lures, prof),
             "baits": rec,
+            "lake_reliability": RELIABILITY,
             "where": (prof["water"].get("structure") or [])[:5],
             "vegetation": (prof["water"].get("vegetation") or [])[:4],
             "skip": rec.get("below") or [],
@@ -184,12 +189,65 @@ def trip_brief(conn: sqlite3.Connection, lake: str, when: date | None = None,
     }
 
 
+def _club_bait_plan(club_baits: list) -> dict:
+    """Bait effects measured across the whole archive and checked year by year.
+
+    These are the ones worth acting on. Soft plastic holds its sign in 9 of 9
+    years on 6,370 trips; a lake's own bait numbers, on a few dozen, do not hold
+    from one half of its history to the other.
+    """
+    if not club_baits:
+        return {}
+    use = [e for e in club_baits if e["support"] == "backed" and e["diff"] > 0]
+    avoid = [e for e in club_baits if e["support"] == "below"]
+    keep = ("bait", "trips", "diff", "lo", "hi", "support")
+    return {
+        "use": [{k: e[k] for k in keep} for e in use[:3]],
+        "avoid": [{k: e[k] for k in keep} for e in avoid[:3]],
+        "n_compared": len(club_baits),
+    }
+
+
+def _what_they_throw(sel, mine_lures, prof) -> dict:
+    """What members actually throw at this lake.
+
+    A lake's own trips cannot say which bait works better there - that does not
+    replicate - but they say perfectly well what people tie on, and which
+    versions and colours they name. That is real local knowledge, so it is
+    reported as description rather than dressed up as a recommendation.
+    """
+    # Count and denominator have to come from the same population, or a bait
+    # named on unscored trips pushes the share past 100%.
+    scored = sel.dropna(subset=["fish_per_hour"])
+    pool = set(scored["report_id"]) if len(scored) else set(sel["report_id"])
+    n = len(pool)
+    if mine_lures.empty or not n:
+        return {"share": [], "subtypes": []}
+    uniq = mine_lures.drop_duplicates(subset=["report_id", "category"])
+    share = []
+    for cat, grp in uniq.groupby("category"):
+        used = len(set(grp["report_id"]) & pool)
+        if used >= 3:
+            share.append({"bait": cat, "trips": used,
+                          "share": round(100 * used / n)})
+    share.sort(key=lambda d: -d["trips"])
+
+    subs = mine_lures[mine_lures["subtype"].notna()
+                      & (mine_lures["subtype"] != "unspecified")]
+    subtypes = [{"value": k, "n": int(v)} for k, v in
+                subs["subtype"].value_counts().head(6).items()]
+    return {"share": share[:6], "subtypes": subtypes,
+            "techniques": (prof["water"].get("technique") or [])[:5]}
+
+
 def _presentation_plan(club_tech: list, lake_tech: list) -> dict:
     """Presentation leads the plan because it measures larger than bait choice.
 
-    Club-wide effects are the reliable part - they survive a year-by-year
-    stability check that individual lakes almost never have the trips to run -
-    so this lake's own numbers ride alongside rather than replacing them.
+    Everything quoted here is club-wide, and deliberately so. Split any single
+    lake's history in half and its own technique effects agree across the halves
+    at r=0.12 with 46% sign agreement - worse than a coin toss - while the same
+    test on the lake's catch rate returns r=0.70. So the lake's own figure is
+    carried only as context inside the evidence, never as the advice.
     """
     s = tech_summary(club_tech) if club_tech else {}
     local = {e["technique"]: e for e in lake_tech}
@@ -199,7 +257,8 @@ def _presentation_plan(club_tech: list, lake_tech: list) -> dict:
         lead.append({**{k: e[k] for k in
                         ("technique", "label", "trips", "diff", "lo", "hi",
                          "years", "years_agreeing")},
-                     "here": ({"diff": here["diff"], "trips": here["trips"]}
+                     "here": ({"diff": here["diff"], "trips": here["trips"],
+                               "lo": here["lo"], "hi": here["hi"]}
                               if here else None)})
     for e in (s.get("below") or [])[:2]:
         avoid.append({k: e[k] for k in ("technique", "label", "trips", "diff")})

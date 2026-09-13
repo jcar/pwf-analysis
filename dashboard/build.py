@@ -990,59 +990,106 @@ function drawBrief() {
   // ---- the plan ----
   const pres = plan.presentation || {};
   const s3 = el("div", "bsec");
-  s3.append(el("h4", null, "How to fish it"));
-  if (pres.lead) s3.append(el("p", "bline", pres.lead + "."));
-  (pres.use || []).forEach(u => {
-    const row = el("div", "pitem");
-    row.append(el("div", "nm", u.label));
-    const d = el("div", "d", `${u.diff >= 0 ? "+" : ""}${u.diff.toFixed(2)} fish/hr`);
-    d.style.color = "var(--u4)";
-    row.append(d, el("div", "m", `${u.years_agreeing}/${u.years} yrs`));
-    if (u.here) {
-      const against = u.here.diff < 0 ? " — against the club pattern here" : "";
-      row.append(el("div", "sub",
-        `at this lake ${u.here.diff >= 0 ? "+" : ""}${u.here.diff.toFixed(2)} over `
-        + `${u.here.trips} trips${against}`));
-    }
-    s3.append(row);
-  });
-  if ((pres.avoid || []).length)
-    s3.append(el("p", "skip", "Leave alone: " + pres.avoid
-      .map(a => `${a.label} (${a.diff.toFixed(2)})`).join(", ")));
-  s3.append(ev("What 'holds up' means", el("div", null,
-    "Each presentation is compared against the other trips that named about as many "
-    + "baits, because trips describing more tackle catch more fish and would "
-    + "otherwise flatter everything at once. The years column counts how many "
-    + "separate years agree with the pooled result — two techniques clear the "
-    + "pooled interval and then flip sign in half the years, so they are not "
-    + "promoted.")));
-  body.append(s3);
+  s3.append(el("h4", null, "What to throw"));
+  s3.append(el("p", "ev-note",
+    "Measured across the whole archive and checked year by year. A single "
+    + "lake's own tackle numbers do not survive that test, so they appear "
+    + "below as description rather than advice."));
 
-  // ---- baits ----
-  const baits = plan.baits || {};
-  const s4 = el("div", "bsec");
-  s4.append(el("h4", null, "What to tie on"));
-  s4.append(el("p", "bline", (baits.lead || "") + "."));
-  ["backed", "suggestive"].forEach(key => {
-    (baits[key] || []).slice(0, 3).forEach(e => {
+  if ((pres.use || []).length) {
+    s3.append(el("p", "bline", "Presentation — it measures larger than bait choice."));
+    pres.use.forEach(u => {
       const row = el("div", "pitem");
-      row.append(el("div", "nm", baitName(e.bait) + (e.club_unstable ? " †" : "")));
+      row.append(el("div", "nm", u.label));
+      const d = el("div", "d", `${u.diff >= 0 ? "+" : ""}${u.diff.toFixed(2)} fish/hr`);
+      d.style.color = "var(--u4)";
+      row.append(d, el("div", "m", `${u.years_agreeing}/${u.years} yrs`));
+      row.append(el("div", "sub",
+        `95% interval ${u.lo.toFixed(2)} to ${u.hi.toFixed(2)} over ${u.trips} trips`));
+      s3.append(row);
+    });
+  }
+  if ((pres.avoid || []).length)
+    s3.append(el("p", "skip", "Behind the alternatives: " + pres.avoid
+      .map(a => `${a.label} (${a.diff.toFixed(2)})`).join(", ")));
+
+  const cb = plan.club_baits || {};
+  if ((cb.use || []).length) {
+    s3.append(el("p", "bline", "Bait family"));
+    cb.use.forEach(e => {
+      const row = el("div", "pitem");
+      row.append(el("div", "nm", baitName(e.bait)));
       const d = el("div", "d", `${e.diff >= 0 ? "+" : ""}${e.diff.toFixed(2)} fish/hr`);
-      d.style.color = e.lo > 0 ? "var(--u4)" : "var(--ink-2)";
+      d.style.color = "var(--u4)";
       row.append(d, el("div", "m", `${e.trips} trips`));
       row.append(el("div", "sub",
-        `95% interval ${e.lo.toFixed(2)} to ${e.hi.toFixed(2)}`
-        + (e.club_unstable
-          ? " · † club-wide this bait does not hold its sign year to year" : "")));
-      row.append(ev(`The ${(b.citations[e.bait] || []).length} trips behind this`,
-        citeTable(b.citations[e.bait])));
+        `95% interval ${e.lo.toFixed(2)} to ${e.hi.toFixed(2)}`));
+      s3.append(row);
+    });
+    if ((cb.avoid || []).length)
+      s3.append(el("p", "skip", "Behind the alternatives: " + cb.avoid
+        .map(e => `${baitName(e.bait)} (${e.diff.toFixed(2)})`).join(", ")));
+  }
+  body.append(s3);
+
+  // ---- what they throw here (description, not advice) ----
+  const here = plan.here || {};
+  if ((here.share || []).length) {
+    const s4 = el("div", "bsec");
+    s4.append(el("h4", null, "At " + b.lake));
+    s4.append(el("p", "ev-note",
+      "What members actually throw here. This lake's own trips say what people "
+      + "tie on — they do not say which bait works better, and the drawer "
+      + "explains why."));
+    here.share.slice(0, 6).forEach(x => {
+      const row = el("div", "pitem");
+      row.append(el("div", "nm", baitName(x.bait)));
+      row.append(el("div", "d", x.share + "%"));
+      row.append(el("div", "m", `${x.trips} trips`));
       s4.append(row);
     });
-  });
-  if ((baits.below || []).length)
-    s4.append(el("p", "skip", "Measurably behind here: " + baits.below.slice(0, 3)
-      .map(e => `${baitName(e.bait)} (${e.diff.toFixed(2)})`).join(", ")));
-  body.append(s4);
+    if ((here.subtypes || []).length)
+      s4.append(el("p", "skip", "Versions named: " + here.subtypes
+        .map(x => `${x.value.replace(/_/g, " ")} (${x.n})`).join(", ")));
+    if ((here.techniques || []).length)
+      s4.append(el("p", "skip", "Presentations named: " + here.techniques
+        .map(x => `${x.value.replace(/_/g, " ")} (${x.n})`).join(", ")));
+
+    s4.append(ev("Why this lake's own numbers are not the advice", (() => {
+      const w = el("div");
+      w.append(el("div", null, plan.lake_reliability || ""));
+      const localRows = (pres.use || []).filter(u => u.here);
+      if (localRows.length) {
+        w.append(el("div", null, "For the record, measured on this lake alone:"));
+        const t = el("table");
+        localRows.forEach(u => {
+          const tr = el("tr");
+          tr.append(el("td", null, u.label),
+            el("td", null, `${u.here.diff >= 0 ? "+" : ""}${u.here.diff.toFixed(2)}`),
+            el("td", null, `${u.here.lo.toFixed(2)} to ${u.here.hi.toFixed(2)}`),
+            el("td", null, `${u.here.trips} trips`));
+          t.append(tr);
+        });
+        w.append(t);
+      }
+      const bl = (plan.baits || {});
+      const cited = ["backed", "suggestive", "below"].flatMap(k => bl[k] || []);
+      if (cited.length) {
+        w.append(el("div", null,
+          "And the lake's own bait estimates, with the trips behind them:"));
+        cited.slice(0, 4).forEach(e => {
+          const d2 = el("div");
+          d2.append(el("div", null,
+            `${baitName(e.bait)} ${e.diff >= 0 ? "+" : ""}${e.diff.toFixed(2)} `
+            + `(${e.lo.toFixed(2)} to ${e.hi.toFixed(2)}) over ${e.trips} trips`));
+          d2.append(citeTable(b.citations[e.bait]));
+          w.append(d2);
+        });
+      }
+      return w;
+    })()));
+    body.append(s4);
+  }
 
   // ---- where ----
   if ((plan.where || []).length) {
