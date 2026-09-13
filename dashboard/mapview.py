@@ -95,6 +95,7 @@ def build_map(lakes: list[dict]) -> dict:
             "rank": lk.get("rank"),
             "fph": lk.get("expected_fph"),
             "miles": lk.get("miles"),
+            "unsure": bool(lk.get("geo_uncertain")) or None,
         })
 
     return {"width": WIDTH, "height": HEIGHT, "states": states,

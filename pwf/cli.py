@@ -857,6 +857,131 @@ def review(limit: int = typer.Option(40)):
            caption="Add recurring ones to pwf/rules/lures.yaml, then re-run `pwf build`.")
 
 
+@app.command("geo-verify")
+def geo_verify():
+    """Check every geocoded lake against the club's own General Directions."""
+    from .geo_verify import verify_all
+
+    conn = _db()
+    res = verify_all(conn)
+    counts = {}
+    for r in res:
+        counts[r["verdict"]] = counts.get(r["verdict"], 0) + 1
+    console.print(
+        f"[bold]{len(res)}[/] lakes checked against their own property page: "
+        f"[green]{counts.get('ok', 0)} agree[/], "
+        f"[red]{counts.get('suspect', 0)} disagree[/], "
+        f"{counts.get('no claim', 0)} state no distance"
+        + (f", {counts['settled']} settled by hand despite the page"
+           if counts.get("settled") else ""))
+
+    bad = sorted((r for r in res if r["verdict"] == "suspect"),
+                 key=lambda r: -r["miss"])
+    if bad:
+        _table("Coordinates the club's directions dispute",
+               ["Lake", "Town", "Reports", "Off by", "What the page says"],
+               [[r["lake"], r["town"] or "", r["reports"], f'{r["miss"]:.0f} mi',
+                 " · ".join(
+                     f'{c["city"].title()} {c["claimed"]}mi→{c["actual"]}mi'
+                     for c in r["claims"][:3])] for r in bad],
+               caption="'Off by' is the worst single contradiction, past a "
+                       "generous tolerance. Run `pwf geo-review` to settle "
+                       "anything this cannot.")
+    n = conn.execute("SELECT COUNT(*) c FROM lakes WHERE geo_uncertain=1"
+                     ).fetchone()["c"]
+    if n:
+        console.print(f"\n{n} lakes have no page to check and remain "
+                      f"ambiguous — [bold]pwf geo-review[/] settles those.")
+
+
+@app.command("geo-review")
+def geo_review(refresh: bool = typer.Option(False, help="Re-fetch candidates"),
+               limit: int = typer.Option(0, help="Stop after this many lakes")):
+    """Settle the lakes no evidence can resolve, one question at a time."""
+    from . import geo_review as GR
+
+    conn = _db()
+    rows = GR.pending(conn)
+    if not rows:
+        console.print("[green]Nothing to review — every lake is resolved.[/]")
+        raise typer.Exit()
+
+    cache = GR.fetch_candidates(conn, refresh=refresh)
+    anchors = GR.club_anchors(conn)
+    from .crawl import iter_cached
+    pages = {slug: doc for _u, slug, doc in iter_cached(conn, "lake")}
+    total = sum(r["report_count"] or 0 for r in rows)
+    console.print(
+        f"[bold]{len(rows)} lakes[/] could not be resolved automatically — "
+        f"{total} reports ride on them.\n"
+        "Most are retired properties with no page left to check. "
+        "Pick a number, [bold]s[/] to skip, [bold]q[/] to stop, "
+        "or type [bold]lat,lon[/] directly.\n")
+
+    done = 0
+    for i, row in enumerate(rows, 1):
+        if limit and done >= limit:
+            break
+        ctx = GR.context(conn, row, cache, anchors=anchors, pages=pages)
+        head = f"[bold]{ctx['lake']}[/]  ·  town on file: {ctx['town'] or '?'}"
+        console.rule(f"{i}/{len(rows)}   {head}")
+        console.print(
+            f"{ctx['reports']} reports, {ctx['first'] or '?'} to "
+            f"{ctx['last'] or '?'}"
+            + (f"  ·  club region: {ctx['region']}" if ctx["region"] else ""))
+        if ctx["current"]:
+            c = ctx["current"]
+            console.print(f"currently placed {c['miles']} mi {c['dir']} "
+                          f"of Dallas ({c['lat']:.3f}, {c['lon']:.3f})")
+        for note in ctx["notes"]:
+            console.print(f'  [dim]member report: "{note}"[/]')
+
+        if not ctx["candidates"]:
+            console.print("[yellow]no candidate towns found[/]")
+        else:
+            _table("", ["#", "County", "State", "Population", "From Dallas",
+                        "Nearest club lake", "Lat", "Lon"],
+                   [[str(n), c["county"] or "?", c["state"] or "?",
+                     f'{c["population"]:,}' if c["population"] else "—",
+                     f'{c["miles"]} mi {c["dir"]}',
+                     "—" if c.get("near") is None else f'{c["near"]} mi',
+                     f'{c["lat"]:.3f}', f'{c["lon"]:.3f}']
+                    for n, c in enumerate(ctx["candidates"], 1)],
+                   caption=f"Ordered by {ctx['basis']}. Ordering the question, "
+                           "not answering it.")
+
+        ans = typer.prompt("choice", default="s", show_default=True).strip()
+        if ans.lower() in ("q", "quit"):
+            break
+        if ans.lower() in ("", "s", "skip"):
+            continue
+        lat = lon = None
+        if "," in ans:
+            try:
+                lat, lon = (float(x) for x in ans.split(",", 1))
+            except ValueError:
+                console.print("[red]could not read that as lat,lon[/]")
+                continue
+        elif ans.isdigit() and 1 <= int(ans) <= len(ctx["candidates"]):
+            c = ctx["candidates"][int(ans) - 1]
+            lat, lon = c["lat"], c["lon"]
+        else:
+            console.print("[red]not a choice[/]")
+            continue
+        GR.apply_choice(conn, ctx["lake"], lat, lon)
+        done += 1
+        console.print(f"[green]set {ctx['lake']} to {lat:.4f}, {lon:.4f}[/]")
+
+    left = conn.execute("SELECT COUNT(*) c FROM lakes WHERE geo_uncertain=1"
+                        ).fetchone()["c"]
+    console.print(f"\n[bold]{done} settled[/], {left} still unresolved. "
+                  "Confirmed picks are saved to data/lake_coords.csv and "
+                  "survive every future re-geocode.")
+    if done:
+        console.print("Run [bold]pwf enrich[/] to refresh weather for the "
+                      "lakes that moved.")
+
+
 @app.command()
 def schema():
     """Print the database schema for use with `pwf sql`."""

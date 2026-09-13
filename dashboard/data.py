@@ -311,7 +311,7 @@ def _planner(conn, trips, lures) -> dict:
 
     # Every lake with coordinates, so the shortlist is seen in context.
     all_lakes = [dict(r) for r in conn.execute(
-        "SELECT name, lat, lon FROM lakes"
+        "SELECT name, lat, lon, geo_uncertain FROM lakes"
         " WHERE lat IS NOT NULL AND report_count > 0")]
 
     forecasts = {}
@@ -356,6 +356,15 @@ def _planner(conn, trips, lures) -> dict:
         lk["rank"] = ranked.get(lk["name"])
         lk["expected_fph"] = rate.get(lk["name"])
         lk["miles"] = miles.get(lk["name"])
+
+    # A lake the club's own directions cannot confirm still has sound catch
+    # data - it is only the drive and the weather join that rest on a guessed
+    # town. So it stays ranked and carries the caveat instead of vanishing.
+    unsure = {lk["name"] for lk in all_lakes if lk.get("geo_uncertain")}
+    for day in days.values():
+        for row in day["shortlist"]:
+            if row["lake"] in unsure:
+                row["geo_uncertain"] = True
 
     return {"days": days, "default_day": sat.isoformat(),
             "map": build_map(all_lakes),

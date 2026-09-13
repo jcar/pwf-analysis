@@ -1,0 +1,950 @@
+{
+ "Bandera": [
+  {
+   "county": "Bandera",
+   "lat": 29.72661,
+   "lon": -99.07365,
+   "population": 877,
+   "state": "Texas"
+  },
+  {
+   "county": "Bandera",
+   "lat": 29.67717,
+   "lon": -98.96336,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Brewster",
+   "lat": 29.62491,
+   "lon": -103.7738,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Bandera",
+   "lat": 29.56495,
+   "lon": -98.95642,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Maverick",
+   "lat": 28.95358,
+   "lon": -100.44702,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Bartlett": [
+  {
+   "county": "Williamson",
+   "lat": 30.79491,
+   "lon": -97.42556,
+   "population": 2761,
+   "state": "Texas"
+  },
+  {
+   "county": "Okmulgee",
+   "lat": 35.4676,
+   "lon": -95.89305,
+   "population": null,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Johnson",
+   "lat": 32.54208,
+   "lon": -97.34224,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Culberson",
+   "lat": 31.91789,
+   "lon": -104.88189,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Bowie": [
+  {
+   "county": "Montague",
+   "lat": 33.559,
+   "lon": -97.84865,
+   "population": 5126,
+   "state": "Texas"
+  },
+  {
+   "county": "Cameron",
+   "lat": 26.19535,
+   "lon": -97.69388,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Montague",
+   "lat": 33.65844,
+   "lon": -97.92031,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Llano",
+   "lat": 30.52908,
+   "lon": -98.73726,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Montague",
+   "lat": 33.6043,
+   "lon": -97.77442,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Bryan": [
+  {
+   "county": "Brazos",
+   "lat": 30.67436,
+   "lon": -96.36996,
+   "population": 82118,
+   "state": "Texas"
+  },
+  {
+   "county": "Wise",
+   "lat": 33.09873,
+   "lon": -97.41835,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Okmulgee",
+   "lat": 35.39065,
+   "lon": -96.06472,
+   "population": null,
+   "state": "Oklahoma"
+  }
+ ],
+ "Burnet": [
+  {
+   "county": "Burnet",
+   "lat": 30.75824,
+   "lon": -98.22836,
+   "population": 6239,
+   "state": "Texas"
+  },
+  {
+   "county": "Pottawatomie",
+   "lat": 35.15591,
+   "lon": -97.08086,
+   "population": null,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Fannin",
+   "lat": 33.55566,
+   "lon": -96.02914,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Harris County",
+   "lat": 29.78134,
+   "lon": -95.05187,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Tarrant",
+   "lat": 32.75041,
+   "lon": -97.33335,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Wichita",
+   "lat": 33.89815,
+   "lon": -98.70756,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Dallas",
+   "lat": 32.76041,
+   "lon": -96.81056,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Hill",
+   "lat": 31.77016,
+   "lon": -97.28695,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Wichita",
+   "lat": 33.97343,
+   "lon": -98.83201,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Burnet",
+   "lat": 30.84629,
+   "lon": -98.3842,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Harris County",
+   "lat": 29.71513,
+   "lon": -95.47856,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Burnet",
+   "lat": 30.73796,
+   "lon": -98.23919,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Cleveland": [
+  {
+   "county": "Liberty",
+   "lat": 30.34132,
+   "lon": -95.08549,
+   "population": 7858,
+   "state": "Texas"
+  },
+  {
+   "county": "Pawnee",
+   "lat": 36.31032,
+   "lon": -96.46584,
+   "population": 3216,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Coleman",
+   "lat": 31.67667,
+   "lon": -99.25333,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Harris County",
+   "lat": 29.76328,
+   "lon": -95.40355,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Presidio",
+   "lat": 30.08516,
+   "lon": -104.5152,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Clifton": [
+  {
+   "county": "Bosque",
+   "lat": 31.78238,
+   "lon": -97.57669,
+   "population": 3361,
+   "state": "Texas"
+  },
+  {
+   "county": "Lincoln",
+   "lat": 35.5034,
+   "lon": -96.9028,
+   "population": 1172,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Lincoln",
+   "lat": 35.5159,
+   "lon": -96.91197,
+   "population": null,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Van Zandt",
+   "lat": 32.7829,
+   "lon": -95.98275,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Collinsville": [
+  {
+   "county": "Tulsa",
+   "lat": 36.36454,
+   "lon": -95.83888,
+   "population": 6492,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Grayson",
+   "lat": 33.5615,
+   "lon": -96.91111,
+   "population": 1687,
+   "state": "Texas"
+  },
+  {
+   "county": "Rogers",
+   "lat": 36.38009,
+   "lon": -95.79526,
+   "population": null,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Tulsa",
+   "lat": 36.35426,
+   "lon": -95.84027,
+   "population": null,
+   "state": "Oklahoma"
+  }
+ ],
+ "Covington": [
+  {
+   "county": "Garfield",
+   "lat": 36.30754,
+   "lon": -97.58644,
+   "population": 554,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Hill",
+   "lat": 32.17848,
+   "lon": -97.25807,
+   "population": 269,
+   "state": "Texas"
+  },
+  {
+   "county": "Fort Bend",
+   "lat": 29.6472,
+   "lon": -95.6222,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Henderson": [
+  {
+   "county": "Rusk",
+   "lat": 32.15322,
+   "lon": -94.79938,
+   "population": 13529,
+   "state": "Texas"
+  },
+  {
+   "county": "Concho",
+   "lat": 31.36933,
+   "lon": -100.0023,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Crosby",
+   "lat": 33.43176,
+   "lon": -101.35209,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Brazos",
+   "lat": 30.65714,
+   "lon": -96.38385,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Jeff Davis",
+   "lat": 30.57321,
+   "lon": -103.69684,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Ector",
+   "lat": 31.87179,
+   "lon": -102.38431,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Midland",
+   "lat": 31.97596,
+   "lon": -102.13681,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Houston": [
+  {
+   "county": "Harris County",
+   "lat": 29.76328,
+   "lon": -95.36327,
+   "population": 2314157,
+   "state": "Texas"
+  },
+  {
+   "county": "LeFlore",
+   "lat": 34.84177,
+   "lon": -94.63134,
+   "population": null,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Ellis",
+   "lat": 32.18404,
+   "lon": -96.88472,
+   "population": 1897,
+   "state": "Texas"
+  },
+  {
+   "county": "Cameron",
+   "lat": 25.92536,
+   "lon": -97.38415,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Harris County",
+   "lat": 29.76051,
+   "lon": -95.37216,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "El Paso",
+   "lat": 31.76816,
+   "lon": -106.48526,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Houston",
+   "lat": 31.57518,
+   "lon": -95.40939,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Chambers",
+   "lat": 29.65884,
+   "lon": -94.91576,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Brazoria",
+   "lat": 29.51968,
+   "lon": -95.27521,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Harris County",
+   "lat": 29.798,
+   "lon": -95.39799,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Harris County",
+   "lat": 29.6524,
+   "lon": -95.27723,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Harris County",
+   "lat": 29.81745,
+   "lon": -95.66328,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Houston",
+   "lat": 31.40685,
+   "lon": -95.60523,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Harris County",
+   "lat": 29.82245,
+   "lon": -95.30855,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Galveston",
+   "lat": 29.50856,
+   "lon": -95.05132,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Harris County",
+   "lat": 29.65491,
+   "lon": -95.2758,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": null,
+   "lat": 31.30694,
+   "lon": -95.40361,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Harris County",
+   "lat": 29.7529,
+   "lon": -95.3593,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Kyle": [
+  {
+   "county": "Hays",
+   "lat": 29.98911,
+   "lon": -97.87723,
+   "population": 35733,
+   "state": "Texas"
+  },
+  {
+   "county": "Hays",
+   "lat": 30.0677,
+   "lon": -97.93491,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Erath",
+   "lat": 32.13348,
+   "lon": -98.12865,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Brazos",
+   "lat": 30.60992,
+   "lon": -96.34052,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Palo Pinto",
+   "lat": 32.82151,
+   "lon": -98.32033,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Mills",
+   "lat": 31.47683,
+   "lon": -98.42698,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Leonard": [
+  {
+   "county": "Fannin",
+   "lat": 33.37955,
+   "lon": -96.24748,
+   "population": 1970,
+   "state": "Texas"
+  },
+  {
+   "county": "Tulsa",
+   "lat": 35.92038,
+   "lon": -95.79943,
+   "population": null,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Cooke",
+   "lat": 33.6215,
+   "lon": -97.15335,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Tarrant",
+   "lat": 32.7443,
+   "lon": -97.42808,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Longbranch": [
+  {
+   "county": "Panola",
+   "lat": 32.07294,
+   "lon": -94.56798,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Noble",
+   "lat": 36.21672,
+   "lon": -96.99531,
+   "population": null,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Noble",
+   "lat": 36.58671,
+   "lon": -97.13532,
+   "population": null,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Noble",
+   "lat": 35.26007,
+   "lon": -97.1053,
+   "population": null,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Payne",
+   "lat": 36.22505,
+   "lon": -97.07532,
+   "population": null,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Payne",
+   "lat": 36.21838,
+   "lon": -97.05532,
+   "population": null,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Noble",
+   "lat": 36.24505,
+   "lon": -97.09032,
+   "population": null,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Payne",
+   "lat": 36.24171,
+   "lon": -97.07198,
+   "population": null,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Noble",
+   "lat": 36.44838,
+   "lon": -97.00365,
+   "population": null,
+   "state": "Oklahoma"
+  }
+ ],
+ "Matagorda": [
+  {
+   "county": "Matagorda",
+   "lat": 28.69082,
+   "lon": -95.96746,
+   "population": 503,
+   "state": "Texas"
+  },
+  {
+   "county": "Matagorda",
+   "lat": 28.67029,
+   "lon": -95.82999,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Calhoun",
+   "lat": 28.22723,
+   "lon": -96.64026,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Calhoun",
+   "lat": 28.28417,
+   "lon": -96.52915,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Matagorda",
+   "lat": 28.45637,
+   "lon": -96.29312,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Matagorda",
+   "lat": 28.72137,
+   "lon": -95.87385,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Calhoun",
+   "lat": 28.17862,
+   "lon": -96.70221,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Medina": [
+  {
+   "county": "Bandera",
+   "lat": 29.79661,
+   "lon": -99.24643,
+   "population": 3247,
+   "state": "Texas"
+  },
+  {
+   "county": "Zapata",
+   "lat": 26.92115,
+   "lon": -99.25948,
+   "population": 3935,
+   "state": "Texas"
+  }
+ ],
+ "Neches": [
+  {
+   "county": "Anderson",
+   "lat": 31.86684,
+   "lon": -95.49579,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Houston",
+   "lat": 31.54407,
+   "lon": -95.22772,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Cherokee",
+   "lat": 31.86376,
+   "lon": -95.41814,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Oakwood": [
+  {
+   "county": "Leon",
+   "lat": 31.5849,
+   "lon": -95.84913,
+   "population": 516,
+   "state": "Texas"
+  },
+  {
+   "county": "Dewey",
+   "lat": 35.93171,
+   "lon": -98.70509,
+   "population": 68,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Harris County",
+   "lat": 30.0348,
+   "lon": -95.5055,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Palestine": [
+  {
+   "county": "Anderson",
+   "lat": 31.76212,
+   "lon": -95.63079,
+   "population": 18288,
+   "state": "Texas"
+  },
+  {
+   "county": "Hopkins",
+   "lat": 33.08456,
+   "lon": -95.80663,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Anderson",
+   "lat": 31.78061,
+   "lon": -95.70227,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Quitman": [
+  {
+   "county": "Wood",
+   "lat": 32.79596,
+   "lon": -95.45106,
+   "population": 1827,
+   "state": "Texas"
+  },
+  {
+   "county": "Hudspeth",
+   "lat": 31.14957,
+   "lon": -105.49635,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Wood",
+   "lat": 32.77846,
+   "lon": -95.3869,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Saint Jo": [
+  {
+   "county": "Montague",
+   "lat": 33.69483,
+   "lon": -97.52252,
+   "population": 1043,
+   "state": "Texas"
+  },
+  {
+   "county": "Fayette",
+   "lat": 29.63135,
+   "lon": -96.95332,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Sulphur Springs": [
+  {
+   "county": "Hopkins",
+   "lat": 33.13845,
+   "lon": -95.60107,
+   "population": 16098,
+   "state": "Texas"
+  },
+  {
+   "county": "Rusk",
+   "lat": 31.89656,
+   "lon": -94.76521,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Hopkins",
+   "lat": 33.17345,
+   "lon": -95.61023,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Tom Green",
+   "lat": 31.45183,
+   "lon": -100.44982,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Hopkins",
+   "lat": 33.14345,
+   "lon": -95.52356,
+   "population": null,
+   "state": "Texas"
+  },
+  {
+   "county": "Hopkins",
+   "lat": 33.15984,
+   "lon": -95.62135,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Troy": [
+  {
+   "county": "Bell",
+   "lat": 31.20684,
+   "lon": -97.30278,
+   "population": 1843,
+   "state": "Texas"
+  },
+  {
+   "county": "Johnston",
+   "lat": 34.32732,
+   "lon": -96.78167,
+   "population": null,
+   "state": "Oklahoma"
+  }
+ ],
+ "Vernon": [
+  {
+   "county": "Wilbarger County",
+   "lat": 34.15536,
+   "lon": -99.26628,
+   "population": 10573,
+   "state": "Texas"
+  },
+  {
+   "county": "McIntosh",
+   "lat": 35.21565,
+   "lon": -95.92583,
+   "population": null,
+   "state": "Oklahoma"
+  },
+  {
+   "county": "Panola",
+   "lat": 32.37321,
+   "lon": -94.04324,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Walnut Springs": [
+  {
+   "county": "Guadalupe",
+   "lat": 29.56884,
+   "lon": -97.96473,
+   "population": 27864,
+   "state": "Texas"
+  },
+  {
+   "county": "Bosque",
+   "lat": 32.05765,
+   "lon": -97.74947,
+   "population": 811,
+   "state": "Texas"
+  },
+  {
+   "county": "Ellis",
+   "lat": 32.52208,
+   "lon": -96.55499,
+   "population": null,
+   "state": "Texas"
+  }
+ ],
+ "Weston": [
+  {
+   "county": "Collin",
+   "lat": 33.349,
+   "lon": -96.66944,
+   "population": 334,
+   "state": "Texas"
+  },
+  {
+   "county": "Fort Bend",
+   "lat": 29.68324,
+   "lon": -95.93571,
+   "population": 2589,
+   "state": "Texas"
+  }
+ ]
+}

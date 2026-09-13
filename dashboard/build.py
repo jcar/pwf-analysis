@@ -138,6 +138,9 @@ header.top > *{position:relative}
 .mp-home{fill:var(--accent)}
 .mp-lake{fill:var(--ink-3); opacity:.42}
 .mp-pick{stroke:var(--surface); stroke-width:1.2; cursor:pointer}
+/* A lake whose town could not be confirmed: same rank, softer edge, so the
+   map never implies a precision the geocoding does not have. */
+.mp-unsure{stroke:var(--accent); stroke-width:1.6; stroke-dasharray:2.5 2.5}
 .mp-lab{fill:var(--ink); font:600 10.5px "Source Sans 3",sans-serif;
   paint-order:stroke; stroke:var(--surface); stroke-width:3px}
 .mp-sel{fill:none; stroke:var(--accent); stroke-width:2.5}
@@ -168,10 +171,25 @@ table.short td{padding:8px 11px; text-align:right; font-size:13.5px;
   font-family:"IBM Plex Mono",monospace; white-space:nowrap}
 table.short td:first-child{text-align:left; font-family:"Source Sans 3",sans-serif}
 table.short tbody tr{cursor:pointer}
-table.short tbody tr:hover td{background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){
+  table.short tbody tr:hover td{background:var(--surface-2)}
+}
 table.short tbody tr.is-sel td{background:var(--accent-soft)}
 table.short tbody tr.is-sel td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .rk{color:var(--ink-3); font-family:"IBM Plex Mono",monospace; font-size:12px}
+.unsure{color:var(--accent); font-weight:600; margin-left:.28em; cursor:help}
+
+/* Interaction feedback stays on paint and composited properties only - never
+   width, height, top or margin - so hovering a dense table cannot cost a
+   layout pass. */
+table.short tbody tr td, table.lakes tbody tr td, tr.clickable td,
+.wk-card, .back{transition:background-color .12s ease, color .12s ease}
+.mp-pick, .sc-pick{transition:opacity .12s ease}
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{transition-duration:.01ms !important;
+    animation-duration:.01ms !important; animation-iteration-count:1 !important;
+    scroll-behavior:auto !important}
+}
 
 .brief{border:1px solid var(--rule-strong); background:var(--surface);
   margin-top:26px}
@@ -301,7 +319,9 @@ table.lakes td{padding:8px 13px; text-align:right; font-size:13.5px;
   border-bottom:1px solid var(--rule); font-variant-numeric:tabular-nums;
   font-family:"IBM Plex Mono",monospace}
 table.lakes td:first-child{font-family:"Source Sans 3",sans-serif; white-space:nowrap}
-table.lakes tbody tr:hover td{background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){
+  table.lakes tbody tr:hover td{background:var(--surface-2)}
+}
 .town{color:var(--ink-3); font-size:12px}
 .tag{display:inline-block; font-size:11px; padding:1px 7px; border-radius:10px;
   background:var(--surface-3); color:var(--ink-2); white-space:nowrap;
@@ -313,7 +333,9 @@ table.lakes tbody tr:hover td{background:var(--surface-2)}
   background:var(--rule); border:1px solid var(--rule)}
 .wk-card{background:var(--surface); padding:15px 16px 14px; cursor:pointer;
   display:flex; flex-direction:column; gap:3px}
-.wk-card:hover{background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){
+  .wk-card:hover{background:var(--surface-2)}
+}
 .wk-card .rank{font-size:11px; letter-spacing:.1em; color:var(--ink-3);
   text-transform:uppercase}
 .wk-card .nm{font-family:Fraunces,"Iowan Old Style",Georgia,serif; font-weight:600; font-size:16px}
@@ -328,7 +350,9 @@ body.profile-open #index{display:none}
 body.profile-open #profile{display:block}
 .back{background:none; border:1px solid var(--rule-strong); color:var(--ink-2);
   font:inherit; font-size:13px; padding:5px 12px; cursor:pointer; border-radius:2px}
-.back:hover{background:var(--surface-2); color:var(--ink)}
+@media (hover:hover) and (pointer:fine){
+  .back:hover{background:var(--surface-2); color:var(--ink)}
+}
 .back:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
 .p-head{border-bottom:1px solid var(--rule-strong); padding-block:26px 20px;
   margin-bottom:28px}
@@ -407,7 +431,9 @@ body.profile-open #profile{display:block}
 .rules{font-size:12.5px; color:var(--ink-3); margin-top:22px; padding-top:16px;
   border-top:1px solid var(--rule); max-width:74ch}
 tr.clickable{cursor:pointer}
-tr.clickable:hover td{background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){
+  tr.clickable:hover td{background:var(--surface-2)}
+}
 
 footer{border-top:1px solid var(--rule-strong); padding-top:24px; color:var(--ink-3);
   font-size:13px; max-width:74ch}
@@ -770,8 +796,10 @@ function drawMap() {
       fill: rateColor(pick.expected_fph, max),
       "data-lake": l.lake,
     });
+    if (l.unsure) c.classList.add("mp-unsure");
     c.append(svgEl("title", {},
-      `${l.lake} — ${fmt(pick.expected_fph)} fish/hr, ${Math.round(pick.miles)} mi`));
+      `${l.lake} — ${fmt(pick.expected_fph)} fish/hr, ${Math.round(pick.miles)} mi`
+      + (l.unsure ? " (approximate location)" : "")));
     c.addEventListener("click", () => selectLake(l.lake));
     svg.append(c);
     if (selLake === l.lake)
@@ -780,7 +808,8 @@ function drawMap() {
       String(pick.rank)));
   });
   svg.append(svgEl("text", { x: 8, y: m.height - 8, class: "mp-leg" },
-    "rings = drive distance · numbers = rank · deeper blue = better"));
+    "rings = drive distance · numbers = rank · deeper blue = better"
+    + (m.lakes.some(l => l.unsure) ? " · dashed = location unconfirmed" : "")));
   host.append(svg);
 }
 
@@ -836,6 +865,15 @@ function drawScatter() {
 }
 
 let shortSort = { key: "score", dir: -1 };
+const UNSURE_NOTE = "Approximate. This is a retired property with no page left "
+  + "to check, and its town name repeats inside Texas, so the club's own "
+  + "directions cannot confirm which one it is. The catch-rate ranking is "
+  + "unaffected \u2014 only the drive and the weather join rest on the guess.";
+
+function isUnsure(name) {
+  return (dayData().shortlist || []).some(r => r.lake === name && r.geo_uncertain);
+}
+
 function drawShortlist() {
   const t = $("#short"), day = dayData();
   const rows = (day.shortlist || []).map((r, i) => ({ ...r, rank: i + 1 }));
@@ -878,7 +916,16 @@ function drawShortlist() {
     [fmt(r.expected_fph), r.miles == null ? "–" : Math.round(r.miles) + " mi",
      r.day_rate ? "$" + Math.round(r.day_rate) : "–", r.n_total,
      cs.band || "–", cs.bust_rate == null ? "–" : Math.round(cs.bust_rate) + "%"]
-      .forEach(v => tr.insertCell().textContent = v);
+      .forEach((v, i) => {
+        const c = tr.insertCell();
+        c.textContent = v;
+        // Only the drive is in doubt: the catch data behind the ranking is
+        // sound, it is the town this lake sits in that could not be confirmed.
+        if (i === 1 && r.geo_uncertain) {
+          c.append(el("span", "unsure", "\u2248"));
+          c.title = UNSURE_NOTE;
+        }
+      });
   });
 }
 
@@ -927,7 +974,8 @@ function drawBrief() {
   const hd = el("div", "brief-hd");
   hd.append(el("h3", null, b.lake));
   const bits = [];
-  if (f.miles != null) bits.push(`${f.miles} mi from Dallas`);
+  if (f.miles != null)
+    bits.push(`${f.miles} mi from Dallas` + (isUnsure(b.lake) ? " (approx.)" : ""));
   if (f.day_rate) bits.push(`$${f.day_rate}/day`);
   if (f.acres) bits.push(`${f.acres} acres`);
   if (f.max_depth_ft) bits.push(`max ${f.max_depth_ft} ft`);

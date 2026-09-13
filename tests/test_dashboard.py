@@ -148,6 +148,44 @@ class TestPlanner:
                      "leaflet", "unpkg.com"):
             assert host not in html.lower(), f"{host} would be blocked"
 
+    def test_unconfirmed_locations_are_marked_not_hidden(self):
+        """A lake whose town the club's directions cannot confirm still ranks -
+        its catch data is sound - but the drive it implies must carry the
+        caveat, because that and the weather join are the only figures resting
+        on the guess."""
+        html = _page()
+        d = _payload(html)["planner"]
+        flagged = {r["lake"] for day in d["days"].values()
+                   for r in day["shortlist"] if r.get("geo_uncertain")}
+        unsure_marks = {m["lake"] for m in d["map"]["lakes"] if m.get("unsure")}
+        # Whatever is flagged in the shortlist must also be flagged on the map,
+        # or the two surfaces would disagree about the same lake.
+        assert flagged <= unsure_marks
+        # And the page must actually render the caveat rather than drop it.
+        assert "UNSURE_NOTE" in html and "mp-unsure" in html
+        assert "location unconfirmed" in html
+
+    def test_flagged_lakes_keep_their_ranking(self):
+        """The flag is a note about geography, never a demotion.
+
+        Ranking is on shrunk lift, not raw rate, so the check is that the
+        published order is exactly what the recommender produced - adding the
+        caveat must not have reordered, dropped or rescored anything.
+        """
+        from datetime import date
+
+        from pwf.recommend import recommend
+
+        d = _payload(_page())["planner"]
+        conn = init(DB_PATH)
+        for day, payload in d["days"].items():
+            rec = recommend(conn, when=date.fromisoformat(day), max_miles=200,
+                            limit=12, with_forecast=False)
+            assert [r["lake"] for r in payload["shortlist"]] == \
+                [r["lake"] for r in rec["lakes"]]
+            assert [r["expected_fph"] for r in payload["shortlist"]] == \
+                [r["expected_fph"] for r in rec["lakes"]]
+
     def test_archive_survives_below_the_planner(self):
         html = _page()
         for marker in ("The archive behind it", "Bait by month", "The lakes",

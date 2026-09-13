@@ -51,17 +51,55 @@ REGION_CENTRES = {
 CLUB_CENTRE = (32.78, -96.80)
 
 
+_TRUE = {"1", "y", "yes", "true", "t"}
+
+
 def _load_overrides() -> dict[str, tuple[float, float]]:
+    """Hand-confirmed coordinates, which beat everything else.
+
+    Only rows marked `confirmed` count. The file also holds a dump of every
+    lake's current coordinate so it can be reviewed in one place, and treating
+    those dumped rows as corrections was actively harmful: it pinned each lake
+    to whatever the geocoder guessed first and made later fixes no-ops. A
+    coordinate is an override because a person said so, not because it is
+    written down.
+    """
     if not OVERRIDES.exists():
         return {}
     out = {}
     with OVERRIDES.open() as fh:
         for row in csv.DictReader(fh):
+            if (row.get("confirmed") or "").strip().lower() not in _TRUE:
+                continue
             try:
                 out[row["lake"].strip()] = (float(row["lat"]), float(row["lon"]))
-            except (KeyError, ValueError):
+            except (KeyError, ValueError, TypeError):
                 continue
     return out
+
+
+def confirm(lake: str, lat: float, lon: float, note: str = "") -> None:
+    """Record a hand-settled coordinate, so it survives every later re-geocode."""
+    rows, seen = [], False
+    if OVERRIDES.exists():
+        with OVERRIDES.open() as fh:
+            rows = list(csv.DictReader(fh))
+    for row in rows:
+        if row.get("lake", "").strip() == lake:
+            row.update(lat=f"{lat:.5f}", lon=f"{lon:.5f}",
+                       confirmed="yes", note=note or row.get("note", ""))
+            seen = True
+    if not seen:
+        rows.append({"lake": lake, "town": "", "lat": f"{lat:.5f}",
+                     "lon": f"{lon:.5f}", "reports": "", "uncertain": "0",
+                     "confirmed": "yes", "note": note})
+    cols = ["lake", "town", "lat", "lon", "reports", "uncertain", "confirmed",
+            "note"]
+    with OVERRIDES.open("w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore")
+        w.writeheader()
+        for row in rows:
+            w.writerow({c: row.get(c, "") for c in cols})
 
 
 def geocode_town(client: httpx.Client, town: str, state: str | None = None,
@@ -72,16 +110,27 @@ def geocode_town(client: httpx.Client, town: str, state: str | None = None,
 
 
 def _geocode(client: httpx.Client, town: str, state: str | None = None,
-             near: tuple[float, float] | None = None) -> dict | None:
+             near: tuple[float, float] | None = None,
+             claims: list[dict] | None = None) -> dict | None:
     """Look up a town, accepting only Texas and Oklahoma matches.
 
     Common town names repeat across states *and* within Texas, so a match
-    outside the club's two states is rejected outright, and among the survivors
-    the one nearest `near` wins. Population is deliberately not the tiebreak:
-    these lakes sit on rural ranches, so the biggest same-named town is usually
-    the wrong one.
+    outside the club's two states is rejected outright. Among the survivors
+    there are three disambiguators, in descending order of how much they can be
+    trusted:
+
+    1. **The club's own directions**, where the property page states them. These
+       are a direct statement of where the lake is - "2 hours and 30 minutes
+       east of Downtown Dallas ... 1 hour east of Tyler" - and two or three such
+       claims triangulate a town to within a few miles. This is the only signal
+       here that is actually *about the lake* rather than about the name.
+    2. **The club's published region**, which narrows to a metro.
+    3. **Population**, which is right for well-known names and a coin toss
+       otherwise - so anything still ambiguous at this point is flagged rather
+       than quietly trusted.
     """
     from .geo_shapes import miles_between
+    from .geo_verify import best_candidate, score
 
     try:
         r = client.get(GEOCODE, params={"name": town, "count": 100,
@@ -95,6 +144,14 @@ def _geocode(client: httpx.Client, town: str, state: str | None = None,
              if r.get("country_code") == "US" and r.get("admin1") in wanted]
     if not cands:
         return None
+
+    if claims:
+        # The directions beat every other signal when they discriminate.
+        pick = best_candidate(cands, claims)
+        if pick is not None:
+            return {"lat": pick["lat"], "lon": pick["lon"], "uncertain": False,
+                    "candidates": len(cands), "source": "directions",
+                    "miss": pick["miss"]}
 
     if near is not None:
         # A stated region: take the candidate nearest it.
@@ -112,23 +169,43 @@ def _geocode(client: httpx.Client, town: str, state: str | None = None,
                           r["latitude"], r["longitude"]) for r in cands)
         uncertain = len(cands) > 1 and spread > 25
 
-    return {"lat": best["latitude"], "lon": best["longitude"],
-            "uncertain": uncertain, "candidates": len(cands)}
+    lat, lon = best["latitude"], best["longitude"]
+    miss = None
+    if claims:
+        # Directions exist but could not pick a winner. If they also contradict
+        # the fallback's choice, say so rather than publishing a drive distance
+        # the club's own page disagrees with.
+        miss = score(lat, lon, claims)["miss"]
+        if miss > 0:
+            uncertain = True
+    return {"lat": lat, "lon": lon, "uncertain": uncertain,
+            "candidates": len(cands),
+            "source": "region" if near is not None else "population",
+            "miss": miss}
 
 
-def geocode_lakes(conn: sqlite3.Connection, force: bool = False) -> dict:
+def geocode_lakes(conn: sqlite3.Connection, force: bool = False,
+                  only: set[int] | None = None) -> dict:
     """Resolve coordinates for every lake.
 
     The network phase runs first and the database is written afterwards: holding
     a write transaction open across HTTP calls locks out anything else using the
     database, which is fatal to a crawl running at the same time.
     """
+    from .geo_verify import parse_directions
+
     overrides = _load_overrides()
     rows = conn.execute(
-        "SELECT lake_id, name, town, lat, lon, region FROM lakes"
+        "SELECT lake_id, name, town, slug, lat, lon, region FROM lakes"
         " ORDER BY report_count DESC").fetchall()
+    if only is not None:
+        rows = [r for r in rows if r["lake_id"] in only]
+    # Cached property pages carry the club's own directions, which are the best
+    # disambiguator available. Read once, up front, before any network work.
+    from .crawl import iter_cached
+    pages = {slug: doc for _u, slug, doc in iter_cached(conn, "lake")}
     stats = {"override": 0, "geocoded": 0, "cached": 0, "failed": 0,
-             "no_town": 0, "uncertain": 0}
+             "no_town": 0, "uncertain": 0, "by_directions": 0}
     cache: dict[tuple, tuple[float, float] | None] = {}
     pending: list[tuple[float, float, int]] = []
 
@@ -159,9 +236,15 @@ def geocode_lakes(conn: sqlite3.Connection, force: bool = False) -> dict:
             # The club's own region for this property is the best available
             # prior on which same-named town is meant.
             anchor = REGION_CENTRES.get(r["region"] or "") if r["region"] else None
-            key = (town, state, anchor)
+            claims = (parse_directions(pages.get(r["slug"] or "", ""))
+                      .get("claims") or [])
+            # Two lakes on the same ranch share a page and therefore a key.
+            sig = tuple((c["city"], round(c["miles"]), c["bearing"])
+                        for c in claims)
+            key = (town, state, anchor, sig)
             if key not in cache:
-                cache[key] = _geocode(client, town, state, near=anchor)
+                cache[key] = _geocode(client, town, state, near=anchor,
+                                      claims=claims)
                 time.sleep(0.25)
             hit = cache[key]
             if hit is None:
@@ -171,6 +254,7 @@ def geocode_lakes(conn: sqlite3.Connection, force: bool = False) -> dict:
                             r["lake_id"]))
             stats["geocoded"] += 1
             stats["uncertain"] += int(hit["uncertain"])
+            stats["by_directions"] += int(hit.get("source") == "directions")
 
     # Single short write transaction, after all network work is done.
     conn.executemany(
@@ -180,14 +264,103 @@ def geocode_lakes(conn: sqlite3.Connection, force: bool = False) -> dict:
 
 
 def write_override_template(conn: sqlite3.Connection) -> Path:
-    """Dump current coordinates so outliers can be hand-corrected."""
+    """Dump current coordinates for review, preserving anything confirmed."""
+    keep = _load_overrides()
     rows = conn.execute(
-        "SELECT name, town, lat, lon, report_count FROM lakes"
+        "SELECT name, town, lat, lon, report_count, geo_uncertain FROM lakes"
         " ORDER BY report_count DESC").fetchall()
+    cols = ["lake", "town", "lat", "lon", "reports", "uncertain", "confirmed",
+            "note"]
     with OVERRIDES.open("w", newline="") as fh:
         w = csv.writer(fh)
-        w.writerow(["lake", "town", "lat", "lon", "reports"])
+        w.writerow(cols)
         for r in rows:
-            w.writerow([r["name"], r["town"] or "", r["lat"] or "",
-                        r["lon"] or "", r["report_count"] or 0])
+            done = r["name"] in keep
+            lat, lon = keep.get(r["name"], (r["lat"], r["lon"]))
+            w.writerow([r["name"], r["town"] or "", lat or "", lon or "",
+                        r["report_count"] or 0, int(bool(r["geo_uncertain"])),
+                        "yes" if done else "",
+                        "hand-confirmed" if done else ""])
     return OVERRIDES
+
+
+def repair_suspect(conn: sqlite3.Connection) -> dict:
+    """Re-resolve only the lakes their own property page contradicts.
+
+    A full re-geocode would re-query every town and churn the weather join for
+    lakes that were never wrong. This touches the ones the club's directions
+    actually dispute, plus anything still flagged uncertain.
+    """
+    from .geo_verify import verify_all
+
+    bad = {r["lake"] for r in verify_all(conn) if r["verdict"] == "suspect"}
+    ids = {r["lake_id"] for r in conn.execute(
+        "SELECT lake_id, name, geo_uncertain FROM lakes"
+        " WHERE lat IS NOT NULL")
+        if r["name"] in bad or r["geo_uncertain"]}
+    if not ids:
+        return {"targeted": 0}
+    before = {r["lake_id"]: (r["lat"], r["lon"]) for r in conn.execute(
+        "SELECT lake_id, lat, lon FROM lakes")}
+    stats = geocode_lakes(conn, force=True, only=ids)
+    from .geo_shapes import miles_between
+    moved = [r["name"] for r in conn.execute(
+        "SELECT lake_id, name, lat, lon FROM lakes WHERE lake_id IN (%s)"
+        % ",".join("?" * len(ids)), tuple(ids))
+        if before.get(r["lake_id"], (None, None))[0] is not None
+        and miles_between(*before[r["lake_id"]], r["lat"], r["lon"]) > 5]
+    stats.update(targeted=len(ids), moved=moved)
+    return stats
+
+
+def verified_towns(conn: sqlite3.Connection) -> dict[str, tuple[float, float]]:
+    """Towns whose position is confirmed by a property page's own directions."""
+    from .crawl import iter_cached
+    from .geo_verify import check, parse_directions
+
+    pages = {slug: doc for _u, slug, doc in iter_cached(conn, "lake")}
+    out: dict[str, tuple[float, float]] = {}
+    for r in conn.execute(
+            "SELECT name, town, slug, lat, lon FROM lakes"
+            " WHERE lat IS NOT NULL AND slug IS NOT NULL"
+            " ORDER BY report_count DESC"):
+        stated = parse_directions(pages.get(r["slug"] or "", ""))
+        if not stated.get("claims"):
+            continue
+        if check(r["lat"], r["lon"], stated)["verdict"] != "ok":
+            continue
+        out.setdefault((r["town"] or "").strip().lower(), (r["lat"], r["lon"]))
+    return out
+
+
+def resolve_by_sibling(conn: sqlite3.Connection) -> list[dict]:
+    """Settle ambiguous lakes from a same-town lake the club's directions pin.
+
+    Most of what is left after the directions pass is a retired property whose
+    page is gone, so there is nothing to check it against. But a retired lake in
+    Crockett is in the same Crockett as the live property whose own page says it
+    is two and a half hours from Dallas. That is real evidence, not a guess -
+    the club had one town in mind - and it settles a third of the remainder
+    without anyone having to look at them.
+    """
+    from .geo_shapes import miles_between
+
+    pinned = verified_towns(conn)
+    fixed = []
+    for r in conn.execute(
+            "SELECT lake_id, name, town, lat, lon, report_count FROM lakes"
+            " WHERE geo_uncertain=1 ORDER BY report_count DESC").fetchall():
+        key = (r["town"] or "").strip().lower()
+        if key not in pinned:
+            continue
+        lat, lon = pinned[key]
+        moved = (miles_between(r["lat"], r["lon"], lat, lon)
+                 if r["lat"] is not None else None)
+        conn.execute("UPDATE lakes SET lat=?, lon=?, geo_uncertain=0"
+                     " WHERE lake_id=?", (lat, lon, r["lake_id"]))
+        fixed.append({"lake": r["name"], "town": r["town"],
+                      "reports": r["report_count"] or 0,
+                      "lat": lat, "lon": lon,
+                      "moved": None if moved is None else round(moved, 1)})
+    conn.commit()
+    return fixed

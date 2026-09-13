@@ -46,6 +46,8 @@ pwf baits --cohort small_clear_grassy --month 4 --pressure falling
 pwf plan --lake "JerMar Lake" --date 2026-09-19
 pwf compare "China Lake,Kickapoo Lake"
 pwf review                          # lure strings the taxonomy missed
+pwf geo-verify                      # check coordinates against the club's own directions
+pwf geo-review                      # settle the lakes no evidence can resolve
 pwf sql "SELECT ..."                # escape hatch; `pwf schema` prints the tables
 pwf dashboard                       # build the aggregate page
 ```
@@ -86,12 +88,54 @@ the narratives leave out, for every trip that has a lake and a date. `pwf covera
 prints the live numbers, and the test suite asserts floors so a rule edit cannot
 quietly lose recall.
 
+## Where each lake actually is
+
+The club publishes a town, not a coordinate, and town names repeat inside Texas —
+82 of the club's 111 towns have more than one Texas or Oklahoma match. Picking the
+most populous one is backwards for lakes on rural ranches: it put Walnut Springs in
+a town of 27,864 near San Antonio when the club's lake is in Bosque County,
+population 811, 170 miles north.
+
+Four passes resolve this, each preferred over the next because it needs nobody:
+
+1. **The club's own directions.** Every live property page carries a "General
+   Directions" line — *"2 hours and 30 minutes east of Downtown Dallas … 1 hour east
+   of Tyler"*. Those are statements about the lake rather than about the name, and
+   two or three of them triangulate a town to within a few miles. **41 lakes.**
+2. **A verified same-town sibling.** A retired lake in Crockett is in the same
+   Crockett as the live property whose page proves where Crockett is. **13 lakes.**
+3. **The club's published region**, then town population.
+4. **`pwf geo-review`** for what is left — 29 retired properties with no page and an
+   ambiguous name. It shows every candidate town with its county, population, drive
+   and compass direction from Dallas, plus anything members wrote that hints at the
+   location, and writes the answer to `data/lake_coords.csv`.
+
+`pwf geo-verify` audits the result: **82 of 84 checkable lakes now agree with their
+own property page**, against 58 before. The pass caught ten real errors, including
+Hickory Creek Ranch (411 reports) sitting 12 miles from Dallas when its page says two
+and a half hours, and the five Heartland 10-10 Ranch lakes placed northwest of Dallas
+when the club says 150 miles east.
+
+Only rows marked `confirmed` in `data/lake_coords.csv` act as overrides. The file
+also holds a dump of every current coordinate for review, and treating those dumped
+rows as corrections used to pin each lake to whatever the geocoder guessed first,
+silently turning later fixes into no-ops.
+
+A lake that stays unresolved is still ranked — its catch data is unaffected — but the
+page marks its drive distance as approximate, because that and the weather join are
+the only figures resting on the guess.
+
 ## Honest limits
 
 Observational data with real confounds. Popular baits get thrown more, and under
 different conditions, than rare ones. Better anglers write more reports. Only ~3% of
 reports admit a blank day, which is not a believable rate — the archive is
 survivorship-biased toward good days. Everything here is association, not cause.
+
+Tackle advice does not replicate per lake: split a lake's history in half and its own
+bait effects agree at r = −0.02. Pooled by lake size it does, at r = +0.39, so that is
+the finest grain the archive supports. Lake choice is the one thing that replicates
+strongly (r = +0.70).
 
 Weather backfill is rate-limited by Open-Meteo's free tier, which meters by request
 weight; a full backfill takes more than one hourly budget. `pwf enrich` is resumable
