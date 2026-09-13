@@ -126,3 +126,60 @@ def test_every_anchor_sits_inside_texas_or_oklahoma():
     for name, (lat, lon) in CITIES.items():
         assert 25.8 <= lat <= 37.1, name
         assert -103.1 <= lon <= -93.5, name
+
+
+class TestRateLimitHandling:
+    """A daily quota is not a slow hour, and treating it as one wastes a night.
+
+    The backfill slept to the top of the hour whenever the body mentioned
+    "hour" *or* "daily", so a daily cap - which says "please try again
+    tomorrow" - sent it into one-hour naps that could never succeed, ending in
+    a generic "gave up after repeated rate limiting" that named no cause.
+    """
+
+    def _err(self, body):
+        import httpx
+
+        req = httpx.Request("GET", "https://archive-api.open-meteo.com/v1/archive")
+        resp = httpx.Response(429, text=body, request=req)
+        return httpx.HTTPStatusError("429", request=req, response=resp)
+
+    def test_daily_limit_stops_rather_than_sleeping(self, monkeypatch):
+        from pwf import weather
+
+        err = self._err('{"reason":"Daily API request limit exceeded. '
+                        'Please try again tomorrow.","error":true}')
+
+        def boom(*a, **k):
+            raise err
+
+        monkeypatch.setattr(weather, "fetch_range", boom)
+        monkeypatch.setattr(weather.time, "sleep",
+                            lambda *_: pytest.fail("must not sleep on a daily cap"))
+        with pytest.raises(weather.DailyLimitReached) as got:
+            weather._fetch_with_backoff(None, 32.7, -96.8,
+                                        __import__("datetime").date(2026, 1, 1),
+                                        __import__("datetime").date(2026, 1, 2),
+                                        lambda *_: None)
+        assert "tomorrow" in str(got.value).lower()
+
+    def test_hourly_limit_still_waits_for_the_bucket(self, monkeypatch):
+        from pwf import weather
+
+        err = self._err('{"reason":"Hourly API request limit exceeded.'
+                        '","error":true}')
+        calls = {"slept": 0}
+
+        def boom(*a, **k):
+            raise err
+
+        monkeypatch.setattr(weather, "fetch_range", boom)
+        monkeypatch.setattr(weather.time, "sleep",
+                            lambda *_: calls.__setitem__("slept", calls["slept"] + 1))
+        monkeypatch.setattr(weather, "MAX_RETRIES", 2)
+        with pytest.raises(RuntimeError):
+            weather._fetch_with_backoff(None, 32.7, -96.8,
+                                        __import__("datetime").date(2026, 1, 1),
+                                        __import__("datetime").date(2026, 1, 2),
+                                        lambda *_: None)
+        assert calls["slept"] == 2, "an hourly cap should still wait it out"

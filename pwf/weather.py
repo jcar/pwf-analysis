@@ -141,6 +141,10 @@ def _seconds_to_next_hour() -> float:
     return max(30.0, (nxt - now).total_seconds())
 
 
+class DailyLimitReached(RuntimeError):
+    """The daily quota is gone. Nothing will succeed again until tomorrow."""
+
+
 def _fetch_with_backoff(client: httpx.Client, lat: float, lon: float,
                         start: date, end: date, progress) -> dict[str, list]:
     """Fetch one span, waiting out the archive's rate limiter.
@@ -150,6 +154,13 @@ def _fetch_with_backoff(client: httpx.Client, lat: float, lon: float,
     hourly limit is gone, the only useful move is to sleep until that bucket
     refills on the hour - exponential guessing just burns attempts against a
     limit that will not move until then.
+
+    The *daily* limit is a different animal and must not be treated the same
+    way. It says "please try again tomorrow", and sleeping to the top of the
+    hour against it simply spins all night in one-hour naps, failing every
+    time, before giving up with a message about repeated rate limiting that
+    says nothing about the actual cause. The backfill is resumable, so the
+    right move is to stop immediately and say when it is worth resuming.
     """
     delay = 15.0
     for attempt in range(MAX_RETRIES):
@@ -159,7 +170,12 @@ def _fetch_with_backoff(client: httpx.Client, lat: float, lon: float,
             if exc.response.status_code != 429:
                 raise
             body = (exc.response.text or "").lower()
-            if "hour" in body or "daily" in body:
+            if "daily" in body:
+                raise DailyLimitReached(
+                    "Open-Meteo's daily quota is spent - it resets at "
+                    "00:00 UTC. Re-run `pwf enrich` tomorrow; everything "
+                    "already stored is kept.") from exc
+            if "hour" in body:
                 wait = _seconds_to_next_hour()
                 progress(f"  hourly budget spent - sleeping "
                          f"{wait / 60:.1f} min until it refills")
@@ -196,7 +212,8 @@ def backfill(conn: sqlite3.Connection, progress=print,
             "SELECT lake_id, MIN(date), MAX(date) FROM conditions GROUP BY lake_id"):
         have[lake_id] = (lo, hi)
 
-    stats = {"cells": 0, "lakes": 0, "rows": 0, "skipped": 0, "failed": 0}
+    stats = {"cells": 0, "lakes": 0, "rows": 0, "skipped": 0, "failed": 0,
+             "stopped_early": False}
     today = date.today()
 
     with httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=120,
@@ -225,6 +242,13 @@ def backfill(conn: sqlite3.Connection, progress=print,
             lat, lon = key
             try:
                 series = _fetch_with_backoff(client, lat, lon, start, end, progress)
+            except DailyLimitReached as exc:
+                # Nothing further will succeed today, and every cell already
+                # written is kept, so stop cleanly instead of failing the rest
+                # of the run one pointless retry at a time.
+                stats["stopped_early"] = True
+                progress(f"  {exc}")
+                break
             except Exception as exc:
                 stats["failed"] += 1
                 progress(f"  ! cell {key}: {type(exc).__name__}")
