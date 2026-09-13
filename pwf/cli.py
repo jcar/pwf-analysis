@@ -129,46 +129,215 @@ def lakes(cohort: str = typer.Option(None), min_trips: int = typer.Option(20),
 
 
 @app.command()
-def lake(name: str):
-    """Scorecard for one lake."""
-    s = A.lake_scorecard(_db(), name)
-    if "error" in s:
-        console.print(f"[red]{s['error']}[/red]")
+def lake(name: str, season: str = typer.Option(None, help="Show baits for one season")):
+    """Full profile for one lake - everything worth knowing before a trip."""
+    from .profile import lake_profile
+
+    conn = _db()
+    p = lake_profile(conn, name)
+    if "error" in p:
+        console.print(f"[red]{p['error']}[/red]  Try `pwf lakes`.")
         raise typer.Exit(1)
 
-    console.print(f"\n[bold]{s['lake']}[/bold] - {s['town'] or '?'}   "
-                  f"{_fmt(s['acres'], 0)} acres, max {_fmt(s['max_depth_ft'], 0)} ft   "
-                  f"cohort: {s['cohort'] or '?'}")
-    console.print(f"{s['trips']} reports ({s['date_range'][0]} .. {s['date_range'][1]}), "
-                  f"{s['scored_trips']} with a countable catch")
-    console.print(f"catch rate {_fmt(s['fish_per_hour_median'])} fish/hr "
-                  f"(club median {_fmt(s['club_median_fph'])})   "
-                  f"best fish {_fmt(s['best_fish_lb'], 1)} lb")
-    console.print(f"clarity median {_fmt(s['clarity_ft_median'], 1)} ft "
-                  f"(n={s['clarity_n']})   vegetation mentioned in "
-                  f"{s['veg_mention_rate']*100:.0f}% of reports")
+    f, v, r = p["facts"], p["volume"], p["rate"]
+    console.print(f"\n[bold]{p['lake']}[/bold]" + (f" - {f['town']}" if f["town"] else ""))
 
-    if not s["by_month"].empty:
-        bm = s["by_month"]
+    bits = []
+    if f["acres"]:
+        bits.append(f"{f['acres']:.0f} acres")
+    if f["max_depth_ft"]:
+        bits.append(f"max {f['max_depth_ft']:.0f} ft")
+    if f["miles"] is not None:
+        bits.append(f"{f['miles']:.0f} mi from Dallas")
+    if f["day_rate"]:
+        half = f" / ${f['half_day_rate']:.0f} half" if f["half_day_rate"] else ""
+        bits.append(f"${f['day_rate']:.0f} day{half}")
+    if f["cohort"]:
+        bits.append(f["cohort"].replace("_", " "))
+    if f["membership_tier"]:
+        bits.append(f["membership_tier"])
+    console.print("  " + "  ·  ".join(bits))
+    if f["boat_type"]:
+        console.print(f"  boat: {f['boat_type']}")
+
+    console.print(
+        f"\n{v['reports']} reports ({v['first']} .. {v['last']}), "
+        f"{v['scored']} with a countable catch  "
+        f"[dim]confidence: {v['confidence']}[/dim]")
+    pct = f", {r['percentile']:.0f}th percentile of club lakes" if r["percentile"] else ""
+    console.print(
+        f"catch rate [bold]{_fmt(r['median'])}[/bold] fish/hr median "
+        f"(club {_fmt(r['club_median'])}){pct}")
+
+    fish = p["fish"]
+    console.print(
+        f"typical trip {_fmt(fish['median_fish_per_trip'], 0)} fish  ·  "
+        f"best fish {_fmt(fish['best_lb'], 1)} lb  ·  "
+        f"{_fmt(fish['over_5lb_rate'], 0)}% of trips reporting a size had a 5 lb+ "
+        f"[dim](n={fish['weight_reports']})[/dim]")
+
+    months = [m for m in p["by_month"] if m["n"]]
+    if months:
+        best = sorted(months, key=lambda m: -(m["median"] or 0))[:3]
         _table("By month", ["month", "trips", "fish/hr"],
-               [[int(i), int(r.n), _fmt(r.fph)] for i, r in bm.iterrows()])
-    tl = s["top_lures"]
-    if not tl.empty:
-        _table("Producing baits", ["bait", "trips", "fish/hr", "vs baseline", "conservative"],
-               [[i, int(r.n_trips), _fmt(r.shrunk_fph), f"{r.lift:.2f}x",
-                 f"{r.lift_lb:.2f}x"] for i, r in tl.head(12).iterrows()],
-               caption="ranked by the conservative column (lower bound, so thin "
-                       "cells sink). Association, not cause.")
-    if len(s["vegetation"]):
-        console.print("vegetation: " + ", ".join(
-            f"{k} ({v})" for k, v in s["vegetation"].head(6).items()))
-    if len(s["structure"]):
-        console.print("cover: " + ", ".join(
-            f"{k} ({v})" for k, v in s["structure"].head(8).items()))
-    if len(s["species"]):
-        console.print("species named: " + ", ".join(
-            f"{k} ({int(v)})" for k, v in s["species"].head(6).items())
-            + "  [dim](only where a member named one)[/dim]")
+               [[m["month"], m["n"], _fmt(m["median"])] for m in months],
+               caption="best: " + ", ".join(f"{m['month']} ({_fmt(m['median'])})"
+                                            for m in best))
+    if p["by_slot"]:
+        _table("By booking slot", ["slot", "trips", "fish/hr"],
+               [[r_["slot"], r_["n"], _fmt(r_["median"])] for r_ in p["by_slot"]],
+               caption="comparable because all-day effort is measured, not assumed")
+
+    yrs = p["by_year"][-6:]
+    if len(yrs) > 2:
+        _table("Recent years", ["year", "trips", "fish/hr"],
+               [[y["year"], y["n"], _fmt(y["median"])] for y in yrs])
+
+    baits = p["baits"]
+    chosen = baits["by_season"].get(season) if season else baits["overall"]
+    if chosen:
+        _table(f"Producing baits{f' - {season}' if season else ''}",
+               ["bait", "trips", "fish/hr", "vs lake baseline"],
+               [[b["bait"], b["n"], _fmt(b["fph"]), f"{b['lift']:.2f}x"]
+                for b in chosen[:10]],
+               caption="ranked conservatively; thin cells sink. Association, not cause.")
+    if not season and baits["by_season"]:
+        line = []
+        for sea, rows in baits["by_season"].items():
+            if rows:
+                line.append(f"{sea}: {rows[0]['bait']} ({rows[0]['n']})")
+        if line:
+            console.print("best by season - " + "  ·  ".join(line))
+
+    w = p["water"]
+    console.print(
+        f"\n[bold]water[/bold]  clarity {_fmt(w['clarity_ft_median'], 1)} ft "
+        f"[dim](n={w['clarity_ft_n']})[/dim]  ·  "
+        f"temp {_fmt(w['water_temp_f_median'], 0)}F [dim](n={w['water_temp_n']})[/dim]  ·  "
+        f"vegetation mentioned in {_fmt(w['veg_mention_rate'], 0)}% of reports")
+    if w["vegetation"]:
+        console.print("  growth: " + ", ".join(
+            f"{x['value'].replace('_',' ')} {x['n']}" for x in w["vegetation"][:5]))
+    if w["structure"]:
+        console.print("  cover: " + ", ".join(
+            f"{x['value'].replace('_',' ')} {x['n']}" for x in w["structure"][:6]))
+    if w["technique"]:
+        console.print("  techniques: " + ", ".join(
+            f"{x['value'].replace('_',' ')} {x['n']}" for x in w["technique"][:6]))
+
+    if fish["species"]:
+        console.print("\n[bold]fish[/bold]  " + ", ".join(
+            f"{x['species'].replace('_',' ')} {x['pct']:.0f}%" for x in fish["species"][:5])
+            + f"  [dim](named on {fish['species_named_on']} reports)[/dim]")
+    if fish["weight_bands"]:
+        console.print("  sizes: " + ", ".join(
+            f"{b['value']} {b['pct']:.0f}%" for b in fish["weight_bands"]))
+
+    cond = p["conditions"]
+    if cond.get("typical"):
+        t = cond["typical"]
+        console.print(
+            f"\n[bold]typically fished in[/bold]  {_fmt(t['temp_max_f'],0)}F, "
+            f"{_fmt(t['wind_mph'],0)} mph wind, {_fmt(t['cloud_pct'],0)}% cloud "
+            f"[dim](n={cond['weather_n']})[/dim]")
+    if f["harvest_rules"]:
+        console.print(f"\n[dim]{f['harvest_rules']}[/dim]")
+
+
+@app.command()
+def weekend(when: str = typer.Option(None, "--date", help="YYYY-MM-DD (default: next Saturday)"),
+            miles: float = typer.Option(200, help="Max straight-line miles from Dallas"),
+            limit: int = typer.Option(15),
+            cohort: str = typer.Option(None, help="Restrict to one water type"),
+            weight_conditions: bool = typer.Option(
+                False, help="Apply measured weather multipliers (all inside noise)"),
+            no_forecast: bool = typer.Option(False, help="Skip the forecast lookup")):
+    """Rank lakes for a day - which trip is the best use of the drive."""
+    from datetime import date as _date
+
+    from .recommend import recommend
+
+    conn = _db()
+    target = _date.fromisoformat(when) if when else None
+    out = recommend(conn, when=target, max_miles=miles, limit=limit, cohort=cohort,
+                    weight_conditions=weight_conditions,
+                    with_forecast=not no_forecast)
+    if out.get("error") or not out["lakes"]:
+        console.print("[yellow]Nothing to rank - run `pwf build` first.[/yellow]")
+        raise typer.Exit(1)
+
+    console.print(
+        f"\n[bold]{out['date']}[/bold] ({out['month_name']})  ·  within {miles:.0f} mi  "
+        f"·  {out['considered']} lakes considered  ·  club {out['month_name']} average "
+        f"{out['club_month_mean']} fish/hr")
+
+    # Keep the table narrow enough not to wrap lake names in a normal terminal.
+    basis_short = {"lake-month": "month", "lake-year": "annual", "club": "club"}
+    cols = ["lake", "mi", "fish/hr", "n", "from", "$", "forecast"]
+    rows = []
+    for L in out["lakes"]:
+        fc = L["forecast"] or {}
+        forecast = (f"{_fmt(fc.get('temp_max_f'),0)}F {_fmt(fc.get('wind_max_mph'),0)}mph"
+                    if fc else "-")
+        rows.append([
+            L["lake"][:24],
+            f"{L['miles']:.0f}" if L["miles"] is not None else "-",
+            _fmt(L["expected_fph"]),
+            f"{L['n_total']}{'*' if L['confidence'] in ('thin','very thin') else ''}",
+            basis_short.get(L["basis"], L["basis"]),
+            f"{L['day_rate']:.0f}" if L["day_rate"] else "-",
+            forecast,
+        ])
+    _table(f"Best bets for {out['date']}", cols, rows,
+           caption="expected catch rate for this lake in this month, backtested at "
+                   "r~0.65 on held-out years. 'from' = month means the lake has "
+                   "data for this month; annual means its year-round average stands "
+                   "in. * marks a thin sample.")
+
+    top = out["lakes"][0]
+    if top["top_baits"]:
+        console.print(f"[bold]{top['lake']}[/bold] baits: " + ", ".join(
+            f"{b['bait']} ({b['n']} trips, {b['lift']:.2f}x)" for b in top["top_baits"]))
+
+    if out["forecast_available"]:
+        console.print(
+            "\n[dim]The forecast is shown, not scored. Measured within lake-month, "
+            "the largest weather effect in the archive - calm vs windy - is about 10% "
+            "with a confidence interval that includes zero. Lake and month separate "
+            "lakes by 3x. Use --weight-conditions to apply the small multipliers "
+            "anyway.[/dim]")
+    if out["weighted_by_conditions"]:
+        console.print("[yellow]Weather multipliers applied - all sit inside noise.[/yellow]")
+
+
+@app.command()
+def calibrate():
+    """Show the measured effort constants and how far they move the rates."""
+    from .analysis import calibrate_effort, effort_hours
+
+    conn = _db()
+    stats = calibrate_effort(conn)
+    hours = effort_hours(conn)
+    console.print(f"effort hours per slot: {hours}  [dim]({stats['source']})[/dim]")
+    if stats["ratio"]:
+        console.print(
+            f"all-day trips catch {stats['ratio']:.2f}x a half-day trip "
+            f"(n={stats['n_all_day']} vs {stats['n_half']}), so all-day effort is "
+            f"{hours['ALL_DAY']} hours - not 8.")
+    row = conn.execute(
+        "SELECT note FROM calibration WHERE key='all_day_hours'").fetchone()
+    if row:
+        console.print(f"[dim]{row[0]}[/dim]")
+    res = conn.execute(
+        "SELECT time_slot, COUNT(*), AVG(fish_per_hour) FROM trips"
+        " WHERE fish_per_hour IS NOT NULL GROUP BY time_slot").fetchall()
+    if res:
+        means = [r[2] for r in res]
+        spread = (max(means) - min(means)) / min(means)
+        _table("Calibrated slot means", ["slot", "trips", "fish/hr"],
+               [[r[0], r[1], _fmt(r[2])] for r in res],
+               caption=f"spread {spread:.1%} - these should be close, or every "
+                       "between-lake comparison inherits the bias")
 
 
 @app.command()
