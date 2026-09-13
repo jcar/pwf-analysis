@@ -281,7 +281,10 @@ def plan(lake: str = typer.Option(..., help="Lake name"),
                ["bait", "trips", "fish/hr", "vs baseline", "conservative"],
                [[i, int(r.n_trips), _fmt(r.shrunk_fph), f"{r.lift:.2f}x",
                  f"{r.lift_lb:.2f}x"] for i, r in out.head(10).iterrows()],
-               caption="Small samples by nature. Association, not cause.")
+               caption=f"Matched on {len(top)} trips, so the conservative column "
+                       "will sit below 1.00 across the board - that is the "
+                       "sample size talking, not the baits. Read the order, not "
+                       "the absolute values. Association, not cause.")
 
     ids = ", ".join(str(int(r)) for r in top["report_id"].head(8))
     console.print(f"[dim]closest matches: report ids {ids}[/dim]")
