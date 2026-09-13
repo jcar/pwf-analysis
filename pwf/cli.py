@@ -727,6 +727,24 @@ def brief(lake: str = typer.Option(..., help="Lake name"),
     plan = b["plan"]
     pres = plan["presentation"]
     console.rule("[bold]What to throw[/bold]", style="dim")
+
+    band = plan.get("size_band") or {}
+    if band.get("use") or band.get("avoid"):
+        console.print(
+            f"[bold]For {band['label']}[/bold] — {band['lakes']} club lakes, "
+            f"{band['trips']} trips, averaging {band['mean_fph']} fish/hr.")
+        if band.get("use"):
+            for e in band["use"]:
+                console.print(
+                    f"  · [bold]{e['value'].replace('_', ' ')}[/bold]  "
+                    f"{e['diff']:+.2f} fish/hr [{e['lo']:+.2f}, {e['hi']:+.2f}] "
+                    f"over {e['trips']} trips")
+        if band.get("avoid"):
+            console.print("  Costs you here: " + ", ".join(
+                f"{e['value'].replace('_', ' ')} ({e['diff']:+.2f})"
+                for e in band["avoid"]))
+        console.print(f"[dim]{band['caveat']}[/dim]\n", width=88)
+
     console.print(
         "[dim]Everything in this section is measured across the whole archive "
         "and checked year by year. A single lake's own tackle numbers do not "

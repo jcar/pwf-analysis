@@ -291,6 +291,7 @@ def _planner(conn, trips, lures) -> dict:
     from pwf.recommend import fetch_forecast, recommend
     from pwf.technique import technique_effects
     from pwf.baits import club_stability
+    from pwf.cohort import band_effects
     from pwf.weather import grid_key
 
     from .mapview import build_map
@@ -303,6 +304,7 @@ def _planner(conn, trips, lures) -> dict:
         "club_tech": technique_effects(trips, _A.tags_frame(conn), lures),
         "bait_stab": club_stability(trips, lures),
     }
+    shared["bands"] = band_effects(trips, lures, shared["tags"])
     cons = lake_consistency(trips)
     cons["__club_bust__"] = club_bust_rate(trips)
     shared["consistency"] = cons
@@ -367,6 +369,11 @@ def _slim_brief(b: dict) -> dict:
     in `profiles` already, keyed by the same lake name, so the page looks them
     up rather than shipping a second copy per day.
     """
-    return {k: b[k] for k in
-            ("lake", "date", "weekday", "expected", "expect", "conditions",
-             "plan", "citations") if k in b}
+    out = {k: b[k] for k in
+           ("lake", "date", "weekday", "expected", "expect", "conditions",
+            "plan", "citations") if k in b}
+    # The band tables are identical for every lake in a band; keep only the
+    # per-lake verdict and drop the full listing.
+    band = (out.get("plan") or {}).get("size_band") or {}
+    band.pop("all", None)
+    return out

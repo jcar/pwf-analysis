@@ -991,10 +991,33 @@ function drawBrief() {
   const pres = plan.presentation || {};
   const s3 = el("div", "bsec");
   s3.append(el("h4", null, "What to throw"));
+  const band = plan.size_band || {};
+  if ((band.use || []).length || (band.avoid || []).length) {
+    s3.append(el("p", "bline",
+      `For ${band.label} — ${band.lakes} club lakes, ${band.trips} trips, `
+      + `averaging ${band.mean_fph} fish an hour.`));
+    (band.use || []).forEach(e => {
+      const row = el("div", "pitem");
+      row.append(el("div", "nm", (e.value || "").replace(/_/g, " ")));
+      const d = el("div", "d", `${e.diff >= 0 ? "+" : ""}${e.diff.toFixed(2)} fish/hr`);
+      d.style.color = "var(--u4)";
+      row.append(d, el("div", "m", `${e.trips} trips`));
+      row.append(el("div", "sub",
+        `95% interval ${e.lo.toFixed(2)} to ${e.hi.toFixed(2)}`));
+      s3.append(row);
+    });
+    if ((band.avoid || []).length)
+      s3.append(el("p", "skip", "Costs you on water this size: " + band.avoid
+        .map(e => `${(e.value || "").replace(/_/g, " ")} (${e.diff.toFixed(2)})`)
+        .join(", ")));
+    s3.append(ev("Why by size rather than by this lake",
+      el("div", null, band.caveat || "")));
+  }
+
   s3.append(el("p", "ev-note",
-    "Measured across the whole archive and checked year by year. A single "
-    + "lake's own tackle numbers do not survive that test, so they appear "
-    + "below as description rather than advice."));
+    "Below: measured across the whole archive. A single lake's own tackle "
+    + "numbers do not survive the replication test, so they appear further "
+    + "down as description rather than advice."));
 
   if ((pres.use || []).length) {
     s3.append(el("p", "bline", "Presentation — it measures larger than bait choice."));

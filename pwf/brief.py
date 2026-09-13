@@ -19,6 +19,8 @@ import pandas as pd
 
 from . import analysis as A
 from .baits import bait_evidence, club_stability, recommendation
+from .cohort import CAVEAT as BAND_CAVEAT
+from .cohort import advice_for, band_effects
 from .consistency import CAVEAT, club_bust_rate, describe, lake_consistency
 from .reliability import CAVEAT as RELIABILITY
 from .profile import lake_profile, miles_from_home
@@ -102,6 +104,7 @@ def trip_brief(conn: sqlite3.Connection, lake: str, when: date | None = None,
                club_tech: list | None = None,
                consistency: dict | None = None,
                bait_stab: dict | None = None,
+               bands: dict | None = None,
                forecast: dict | None = None) -> dict:
     """Everything needed to decide on, and fish, one lake on one day."""
     when = when or _next_saturday()
@@ -123,6 +126,8 @@ def trip_brief(conn: sqlite3.Connection, lake: str, when: date | None = None,
     if club_tech is None:
         club_tech = technique_effects(trips, tags, lures)
     club_baits = bait_evidence(trips, lures, min_trips=60, stability=bait_stab)
+    if bands is None:
+        bands = band_effects(trips, lures, tags)
 
     prof = lake_profile(conn, name, trips=trips, lures=lures,
                         club_technique=club_tech, consistency=consistency,
@@ -173,6 +178,10 @@ def trip_brief(conn: sqlite3.Connection, lake: str, when: date | None = None,
         },
         "conditions": {"forecast": fc or None, "note": _conditions_note(fc)},
         "plan": {
+            # Conditioned on lakes of this size, which is the finest grain that
+            # replicates. Falls back to club-wide when acreage is unknown.
+            "size_band": {**advice_for(bands, prof["facts"].get("acres")),
+                          "caveat": BAND_CAVEAT},
             "presentation": _presentation_plan(club_tech, lake_tech),
             "club_baits": _club_bait_plan(club_baits),
             "here": _what_they_throw(sel_all, mine_lures, prof),

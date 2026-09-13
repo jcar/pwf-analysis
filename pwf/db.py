@@ -209,7 +209,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
     """Add columns introduced after a database was first created."""
     wanted = {
         "trips": [("trip_date_source", "TEXT")],
-        "lakes": [("report_count", "INTEGER")],
+        "lakes": [("report_count", "INTEGER"),
+                  ("geo_uncertain", "INTEGER")],
     }
     for table, cols in wanted.items():
         have = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
