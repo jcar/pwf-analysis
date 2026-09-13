@@ -179,9 +179,29 @@ class TestPlanner:
 
 
 class TestPageActuallyRuns:
-    """`node --check` only parses. It passed while the map was broken by a
-    chained `append()` — Node.append returns undefined — which would have left
-    the map blank. This executes the render paths against a DOM stub instead."""
+    """`node --check` only parses, and an earlier version of this test only ran
+    whatever happened to be inside <script> — which passed while the entire
+    planner sat in the <style> block being silently parsed as CSS, so the page
+    rendered nothing. These assert the code is in the right block, that it runs,
+    and that it actually builds the planner."""
+
+    def test_planner_code_is_in_the_script_block_not_the_stylesheet(self):
+        html = _page()
+        style_lo, style_hi = html.find("<style>"), html.find("</style>")
+        script_lo = html.find("<script>")
+        pos = html.find("const P = D.planner")
+        assert pos > 0, "planner code missing entirely"
+        assert not (style_lo < pos < style_hi), (
+            "planner JavaScript is inside <style> — it will be parsed as CSS "
+            "and silently do nothing")
+        assert pos > script_lo, "planner code sits before the script block"
+
+    def test_every_render_function_reaches_the_script_block(self):
+        html = _page()
+        script = html[html.find("<script>"):]
+        for fn in ("drawMap", "drawScatter", "drawShortlist", "drawBrief",
+                   "drawPlanner", "selectLake", "citeTable"):
+            assert f"function {fn}" in script, f"{fn} not in the script block"
 
     def test_render_paths_execute_without_error(self):
         import shutil

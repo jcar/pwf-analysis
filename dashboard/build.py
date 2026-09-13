@@ -308,6 +308,376 @@ table.lakes tbody tr:hover td{background:var(--surface-2)}
   font-family:"Source Sans 3",sans-serif}
 .tag.focus{background:var(--accent-soft); color:var(--accent); font-weight:600}
 
+/* ---- weekend panel ---- */
+.wk{display:grid; grid-template-columns:repeat(auto-fit,minmax(232px,1fr)); gap:1px;
+  background:var(--rule); border:1px solid var(--rule)}
+.wk-card{background:var(--surface); padding:15px 16px 14px; cursor:pointer;
+  display:flex; flex-direction:column; gap:3px}
+.wk-card:hover{background:var(--surface-2)}
+.wk-card .rank{font-size:11px; letter-spacing:.1em; color:var(--ink-3);
+  text-transform:uppercase}
+.wk-card .nm{font-family:Fraunces,"Iowan Old Style",Georgia,serif; font-weight:600; font-size:16px}
+.wk-card .rate{font-family:"IBM Plex Mono",monospace; font-size:22px; font-weight:600;
+  line-height:1.15}
+.wk-card .sub{font-size:12.5px; color:var(--ink-3)}
+.wk-card .baits{font-size:12.5px; color:var(--ink-2); margin-top:5px}
+
+/* ---- lake profile view ---- */
+#profile{display:none}
+body.profile-open #index{display:none}
+body.profile-open #profile{display:block}
+.back{background:none; border:1px solid var(--rule-strong); color:var(--ink-2);
+  font:inherit; font-size:13px; padding:5px 12px; cursor:pointer; border-radius:2px}
+.back:hover{background:var(--surface-2); color:var(--ink)}
+.back:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.p-head{border-bottom:1px solid var(--rule-strong); padding-block:26px 20px;
+  margin-bottom:28px}
+.p-head h2{font-size:clamp(24px,3.6vw,34px); font-weight:700; letter-spacing:-.015em;
+  margin:14px 0 8px}
+.facts{display:flex; flex-wrap:wrap; gap:5px 18px; font-size:13.5px; color:var(--ink-2)}
+.facts b{color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums}
+.p-lead{display:flex; flex-wrap:wrap; gap:26px; margin-top:18px}
+.p-stat .v{font-family:"IBM Plex Mono",monospace; font-size:26px; font-weight:600;
+  line-height:1.1}
+.p-stat .k{font-size:12px; color:var(--ink-3); margin-top:3px}
+.summary{margin:0 0 30px; max-width:78ch}
+.summary h3{font-size:13px; font-weight:600; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-3); font-family:"Source Sans 3",sans-serif;
+  margin-bottom:12px}
+.summary p{margin:0 0 12px; font-size:15.5px; line-height:1.62; color:var(--ink)}
+.summary .mentions{font-size:14px; color:var(--ink-2); border-left:3px solid var(--accent);
+  padding:10px 0 10px 14px; background:var(--accent-soft); margin-top:4px}
+.summary .mentions b{color:var(--ink); font-weight:600}
+.summary .caveat-line{font-size:13.5px; color:var(--ink-2); margin-top:12px;
+  padding-top:10px; border-top:1px solid var(--rule)}
+.expect{border:1px solid var(--rule); background:var(--surface); padding:14px 16px;
+  margin:0 0 26px}
+.expect .s{font-size:15px; line-height:1.6; margin:0 0 8px}
+.expect .figs{display:flex; flex-wrap:wrap; gap:6px 20px; font-size:12.5px;
+  color:var(--ink-3); font-family:"IBM Plex Mono",monospace}
+.expect .figs b{color:var(--ink-2); font-weight:600}
+.expect .cav{font-size:12px; color:var(--ink-3); margin:9px 0 0; line-height:1.5}
+.tech-yrs{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--ink-3)}
+.ev{display:grid; gap:16px}
+.ev-group{border:1px solid var(--rule); background:var(--surface)}
+.ev-group.is-backed{border-color:var(--accent); box-shadow:inset 3px 0 0 var(--accent)}
+.ev-group.is-below{box-shadow:inset 3px 0 0 var(--d3)}
+.ev-head{display:flex; align-items:baseline; justify-content:space-between;
+  gap:12px; padding:10px 14px; border-bottom:1px solid var(--rule);
+  background:var(--surface-2)}
+.ev-head .t{font-size:12px; font-weight:600; letter-spacing:.07em;
+  text-transform:uppercase; color:var(--ink-2)}
+.ev-head .c{font-size:12px; color:var(--ink-3)}
+.ev-row{display:grid; grid-template-columns:1fr auto auto; gap:4px 12px;
+  padding:9px 14px; border-bottom:1px solid var(--rule); align-items:center}
+.ev-row:last-child{border-bottom:none}
+.ev-row .nm{font-size:14px; font-weight:500}
+.ev-row .d{font-family:"IBM Plex Mono",monospace; font-size:13.5px;
+  font-variant-numeric:tabular-nums; font-weight:600}
+.ev-row .n{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-3)}
+.ev-row .ci{grid-column:1/-1; display:flex; align-items:center; gap:9px;
+  font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--ink-3)}
+.ci-track{position:relative; flex:1; height:9px; background:var(--surface-3);
+  min-width:90px}
+.ci-track .zero{position:absolute; top:-2px; bottom:-2px; width:1px;
+  background:var(--rule-strong)}
+.ci-track .span{position:absolute; top:2px; height:5px; border-radius:3px}
+.ci-track .pt{position:absolute; top:0; width:3px; height:9px; background:var(--ink)}
+.ev-row .dt{grid-column:1/-1; font-size:12.5px; color:var(--ink-2); margin-top:2px}
+.ev-lead{font-size:15.5px; line-height:1.6; margin:0 0 6px}
+.ev-note{font-size:12.5px; color:var(--ink-3); margin:0 0 14px; max-width:74ch}
+.p-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(288px,1fr)); gap:30px}
+.p-block h3{margin-bottom:4px}
+.p-block .cap{font-size:12.5px; color:var(--ink-3); margin:0 0 12px}
+.bars{display:grid; grid-template-columns:auto 1fr auto; gap:3px 9px; align-items:center;
+  font-size:13px}
+.bars .lb{color:var(--ink-2); white-space:nowrap}
+.bars .tr{background:var(--surface-3); height:13px; position:relative}
+.bars .tr i{position:absolute; inset:0 auto 0 0; display:block}
+.bars .vl{font-family:"IBM Plex Mono",monospace; font-size:12.5px;
+  font-variant-numeric:tabular-nums; color:var(--ink-2)}
+.kv{display:grid; grid-template-columns:1fr auto; gap:4px 12px; font-size:13.5px}
+.kv .k{color:var(--ink-2)}
+.kv .v{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums;
+  color:var(--ink)}
+.pill-row{display:flex; flex-wrap:wrap; gap:6px; margin-top:4px}
+.pill{font-size:12px; padding:2px 9px; border-radius:11px; background:var(--surface-3);
+  color:var(--ink-2)}
+.pill b{color:var(--ink); font-weight:600}
+.rules{font-size:12.5px; color:var(--ink-3); margin-top:22px; padding-top:16px;
+  border-top:1px solid var(--rule); max-width:74ch}
+tr.clickable{cursor:pointer}
+tr.clickable:hover td{background:var(--surface-2)}
+
+footer{border-top:1px solid var(--rule-strong); padding-top:24px; color:var(--ink-3);
+  font-size:13px; max-width:74ch}
+footer h3{color:var(--ink-2); margin-bottom:7px}
+footer p{margin:0 0 11px}
+@media (max-width:560px){ .kpi .v{font-size:23px} }
+</style>
+
+<div class="wrap">
+<header class="top">
+  <svg class="contours" id="contours" aria-hidden="true"></svg>
+  <p class="eyebrow">Private Water Fishing &middot; member report archive</p>
+  <h1>Private Water Pattern Book</h1>
+  <p class="lede">Thirteen thousand member reports, read by rule and joined to the
+  weather each trip was fished under, pointed at one question: which lake is worth
+  booking, and what goes in the boat. Every figure below opens onto the trips it
+  came from.</p>
+  <p class="provenance" id="prov"></p>
+</header>
+
+<div id="index">
+
+<section id="planner">
+  <div class="daybar" id="daybar"></div>
+  <p class="wx" id="wx"></p>
+  <p class="note" id="plan-note"></p>
+
+  <div class="plan-grid">
+    <div>
+      <div style="overflow-x:auto"><table class="short" id="short"></table></div>
+      <div class="brief" id="brief"></div>
+    </div>
+    <div class="maprail">
+      <div class="mapbox" id="mapbox"></div>
+      <div class="scat" id="scat"></div>
+    </div>
+  </div>
+</section>
+
+<hr class="lateral">
+
+<div class="archive-head">
+  <h2>The archive behind it</h2>
+  <span class="tn">every number above comes from here</span>
+</div>
+
+<div class="kpis" id="kpis"></div>
+<p class="caveat" id="caveat"></p>
+
+<section>
+  <div class="shead"><h2 id="wk-title">Ranked for the weekend</h2></div>
+  <p class="note" id="wk-note"></p>
+  <div class="wk" id="weekend"></div>
+</section>
+
+<section>
+  <div class="shead"><h2>What the archive will tell you</h2></div>
+  <p class="note">Members write down what they caught and what they threw far more
+  reliably than they write down the water. Everything on the left is available on
+  almost every trip; everything on the right only exists when somebody mentioned it.
+  Figures drawn from the right-hand list carry their sample size everywhere they appear.</p>
+  <div class="tiers">
+    <div class="tier"><h3>Recorded almost every trip</h3>
+      <p class="sub">Structured fields, plus weather joined by lake and date</p>
+      <div class="cov" id="cov-full"></div></div>
+    <div class="tier"><h3>Only when a member wrote it</h3>
+      <p class="sub">Pulled from the narrative by pattern matching</p>
+      <div class="cov" id="cov-part"></div></div>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><h2>Bait by month</h2><span class="tn" id="hm-n"></span></div>
+  <p class="note">Each cell compares a bait's catch rate against that month's own
+  baseline, so seasonal swings in the fishing don't masquerade as bait performance.
+  Rates are pulled toward the baseline in proportion to how thin the cell is.
+  Hatched cells are months where that bait was named on too few trips to score.</p>
+  <div class="hm-scroll"><table class="hm" id="hm"></table></div>
+  <div class="legend">
+    <span>Worse than the month's baseline</span>
+    <span class="sw"><i style="background:var(--d4)"></i><i style="background:var(--d3)"></i><i style="background:var(--d2)"></i><i style="background:var(--d1)"></i><i style="background:var(--dmid)"></i><i style="background:var(--u1)"></i><i style="background:var(--u2)"></i><i style="background:var(--u3)"></i><i style="background:var(--u4)"></i></span>
+    <span>Better</span>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><h2>When the barometer moves</h2></div>
+  <p class="note">Trips grouped by the 24-hour pressure change at the lake on the day
+  they were fished. A front is the one condition anglers plan around, and it is on
+  record for every trip whether or not the member mentioned the weather. Restricted
+  to <span id="exact-n" class="num"></span> trips whose exact date is known from a
+  reservation &mdash; older reports carry a date estimated from when they were
+  posted, and a one-day error ruins a pressure reading.</p>
+  <div class="panels" id="pressure"></div>
+</section>
+
+<section>
+  <div class="shead"><h2>Under the sky you get</h2></div>
+  <p class="note">The same split by cloud cover.</p>
+  <div class="panels" id="clouds"></div>
+</section>
+
+<section>
+  <div class="shead"><h2>Water types</h2></div>
+  <p class="note">Lakes grouped by acreage, how clear members report the water, and how
+  often they mention vegetation. Any single report rarely describes the water, but a
+  lake with two hundred reports accumulates enough mentions to type it.</p>
+  <div class="cohorts" id="cohorts"></div>
+</section>
+
+<section>
+  <div class="shead"><h2>The lakes</h2><span class="tn">click a column to sort</span></div>
+  <p class="note">Lakes with at least fifteen reports. Catch rate is the median across
+  trips with a countable catch, normalised to fish per hour on the water.</p>
+  <div class="tbl-scroll"><table class="lakes" id="lakes"></table></div>
+</section>
+
+</div><!-- /#index -->
+
+<div id="profile"></div>
+
+<footer>
+  <h3>How to read this</h3>
+  <p>This is observational data, not an experiment. Popular baits get thrown more
+  often, and under different conditions, than rare ones; better anglers write more
+  reports; and only about three percent of reports admit a blank day, which is not a
+  believable rate. Everything here describes an association between what someone threw
+  and what they caught. None of it establishes cause.</p>
+  <p>Catch rates are shrunk toward the baseline of whatever slice they sit in, and
+  ranked on the conservative end of the estimate, so a bait that went well on four
+  trips does not outrank one that went well on four hundred. Sample sizes are printed
+  beside every figure for exactly this reason.</p>
+  <p>Built from public report pages by a rule-based pipeline: no model reads the
+  reports, and re-running it produces the same numbers. This page shows aggregates
+  only &mdash; no member names and no report text.</p>
+  <p id="gen" class="num"></p>
+</footer>
+</div>
+
+<script>
+const D = __DATA__;
+const $ = s => document.querySelector(s);
+const el = (t, c, x) => { const n = document.createElement(t); if (c) n.className = c;
+  if (x !== undefined) n.textContent = x; return n; };
+const baitName = b => D.bait_labels[b] || b;
+const fmt = (v, n = 2) => (v === null || v === undefined) ? "–" : Number(v).toFixed(n);
+
+/* ---- masthead + kpis ---- */
+const h = D.headline;
+$("#prov").innerHTML =
+  `<span><b>${h.reports.toLocaleString()}</b> reports</span>` +
+  `<span><b>${h.lakes}</b> lakes</span>` +
+  `<span><b>${h.first || "?"}</b> to <b>${h.last || "?"}</b></span>` +
+  `<span><b>${fmt(h.lake_known_pct, 1)}%</b> matched to a lake</span>`;
+$("#gen").textContent = "Generated " + D.generated;
+$("#caveat").innerHTML =
+  `The archive runs from <b>${h.first}</b>, but a catch <i>rate</i> needs both a fish ` +
+  `count and a half- or full-day window, and those fields only appear on reports from ` +
+  `about <b>${h.scored_from}</b> onward. Every rate on this page therefore rests on ` +
+  `<b>${h.scored.toLocaleString()}</b> trips from ${h.scored_from}–${h.scored_to}, not on all ` +
+  `${h.reports.toLocaleString()} reports. The older reports still contribute the baits ` +
+  `people threw and how they described the water.`;
+
+[["reports", h.reports.toLocaleString(), "reports read"],
+ ["lakes", h.lakes, "lakes in the club"],
+ ["scored", h.scored.toLocaleString(), "trips with a countable catch"],
+ ["fph", fmt(h.median_fph), "median fish per hour"],
+ ["best", h.best_lb ? fmt(h.best_lb, 1) + " lb" : "–", "heaviest fish reported"]
+].forEach(([, v, k]) => {
+  const d = el("div", "kpi"); d.append(el("div", "v", v), el("div", "k", k));
+  $("#kpis").append(d);
+});
+
+/* ---- coverage ---- */
+function coverage(target, rows) {
+  const box = $(target);
+  rows.forEach(r => {
+    box.append(el("div", "lab", r.dimension), el("div", "pc", fmt(r.pct, 0) + "%"));
+    const bar = el("div", "bar"), fill = el("i");
+    fill.style.width = Math.min(100, r.pct) + "%";
+    bar.append(fill); box.append(bar);
+  });
+}
+coverage("#cov-full", D.coverage.filter(r => r.tier === "full"));
+coverage("#cov-part", D.coverage.filter(r => r.tier === "partial"));
+
+/* ---- heatmap ---- */
+const STEPS = [
+  [0.55, "--d4"], [0.72, "--d3"], [0.86, "--d2"], [0.95, "--d1"],
+  [1.05, "--dmid"], [1.16, "--u1"], [1.32, "--u2"], [1.55, "--u3"], [Infinity, "--u4"]
+];
+const DARKSTEP = { "--d4": 1, "--u4": 1 };
+function cellColor(lift) { for (const [hi, v] of STEPS) if (lift < hi) return v; return "--u4"; }
+
+(function heatmap() {
+  const t = $("#hm"), hm = D.heatmap;
+  const byKey = new Map(hm.cells.map(c => [c.bait + "|" + c.month, c]));
+  const head = t.insertRow();
+  head.append(el("th", "rowh", ""));
+  hm.months.forEach(m => head.append(el("th", null, m)));
+  let scored = 0;
+  hm.baits.forEach(b => {
+    const row = t.insertRow();
+    row.append(el("th", "rowh", baitName(b)));
+    for (let m = 1; m <= 12; m++) {
+      const c = byKey.get(b + "|" + m), td = row.insertCell();
+      if (!c) { td.className = "void"; td.textContent = "·";
+        td.title = baitName(b) + " — fewer than " + hm.min_cell + " trips this month";
+        continue; }
+      scored++;
+      const tok = cellColor(c.lift);
+      td.style.background = "var(" + tok + ")";
+      td.style.color = DARKSTEP[tok] ? "var(--on-dark)" : "var(--on-light)";
+      td.textContent = c.lift.toFixed(2);
+      td.title = `${baitName(b)} in ${hm.months[m - 1]}\n` +
+        `${c.lift.toFixed(2)}x the month baseline\n` +
+        `${fmt(c.fph)} fish/hr across ${c.n} trips`;
+    }
+  });
+  $("#hm-n").textContent = scored + " scored cells";
+})();
+
+/* ---- condition panels ---- */
+function panels(target, rows, labels) {
+  const box = $(target);
+  if (!rows.length) { box.append(el("div", "panel", "Not enough data yet.")); return; }
+  rows.forEach(r => {
+    const p = el("div", "panel");
+    const head = el("div", "ph");
+    head.append(el("div", "pv", fmt(r.median_fph)), el("div", "pn", r.n + " trips"));
+    p.append(el("h3", null, labels[r.value] || r.value), head);
+    const note = el("div", "pn", "median fish/hr"); note.style.marginTop = "2px";
+    p.append(note);
+    const ol = el("ol");
+    r.top.forEach(b => {
+      const li = el("li");
+      const chip = el("span", "chip", b.lift.toFixed(2) + "x");
+      const tok = cellColor(b.lift);
+      chip.style.background = "var(" + tok + ")";
+      chip.style.color = DARKSTEP[tok] ? "var(--on-dark)" : "var(--on-light)";
+      li.append(el("span", null, baitName(b.bait)), chip, el("span", "tn", "n=" + b.n));
+      ol.append(li);
+    });
+    p.append(ol); box.append(p);
+  });
+}
+const exn = document.getElementById("exact-n");
+if (exn) exn.textContent = (D.exact_trips || 0).toLocaleString();
+panels("#pressure", D.pressure, D.trend_labels);
+panels("#clouds", D.clouds, D.trend_labels);
+
+/* ---- cohorts ---- */
+(function cohorts() {
+  const box = $("#cohorts");
+  D.cohorts.forEach(c => {
+    const d = el("div", "cohort" + (c.cohort === "small_clear_grassy" ? " is-focus" : ""));
+    d.append(el("h3", null, D.cohort_labels[c.cohort] || c.cohort));
+    d.append(el("div", "meta",
+      `${c.lakes} lakes · ${c.trips} trips · median ${fmt(c.median_acres, 0)} acres · ${fmt(c.median_fph)} fish/hr`));
+    const ul = el("ul");
+    c.top.forEach(b => {
+      const li = el("li");
+      li.append(el("span", null, baitName(b.bait)),
+                el("span", "tn", b.lift.toFixed(2) + "x  n=" + b.n));
+      ul.append(li);
+    });
+    d.append(ul); box.append(d);
+  });
+})();
+
 /* ---- contour field in the masthead ---- */
 (function contours() {
   const svg = document.getElementById("contours");
@@ -748,381 +1118,10 @@ function drawPlanner() {
   drawMap(); drawScatter(); drawShortlist(); drawBrief();
 }
 
-if (P.days) {
-  const first = dayData().shortlist || [];
-  selLake = first.length ? first[0].lake : null;
-  drawPlanner();
-}
-
-/* ---- weekend panel ---- 
-.wk{display:grid; grid-template-columns:repeat(auto-fit,minmax(232px,1fr)); gap:1px;
-  background:var(--rule); border:1px solid var(--rule)}
-.wk-card{background:var(--surface); padding:15px 16px 14px; cursor:pointer;
-  display:flex; flex-direction:column; gap:3px}
-.wk-card:hover{background:var(--surface-2)}
-.wk-card .rank{font-size:11px; letter-spacing:.1em; color:var(--ink-3);
-  text-transform:uppercase}
-.wk-card .nm{font-family:Fraunces,"Iowan Old Style",Georgia,serif; font-weight:600; font-size:16px}
-.wk-card .rate{font-family:"IBM Plex Mono",monospace; font-size:22px; font-weight:600;
-  line-height:1.15}
-.wk-card .sub{font-size:12.5px; color:var(--ink-3)}
-.wk-card .baits{font-size:12.5px; color:var(--ink-2); margin-top:5px}
-
-/* ---- lake profile view ---- */
-#profile{display:none}
-body.profile-open #index{display:none}
-body.profile-open #profile{display:block}
-.back{background:none; border:1px solid var(--rule-strong); color:var(--ink-2);
-  font:inherit; font-size:13px; padding:5px 12px; cursor:pointer; border-radius:2px}
-.back:hover{background:var(--surface-2); color:var(--ink)}
-.back:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
-.p-head{border-bottom:1px solid var(--rule-strong); padding-block:26px 20px;
-  margin-bottom:28px}
-.p-head h2{font-size:clamp(24px,3.6vw,34px); font-weight:700; letter-spacing:-.015em;
-  margin:14px 0 8px}
-.facts{display:flex; flex-wrap:wrap; gap:5px 18px; font-size:13.5px; color:var(--ink-2)}
-.facts b{color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums}
-.p-lead{display:flex; flex-wrap:wrap; gap:26px; margin-top:18px}
-.p-stat .v{font-family:"IBM Plex Mono",monospace; font-size:26px; font-weight:600;
-  line-height:1.1}
-.p-stat .k{font-size:12px; color:var(--ink-3); margin-top:3px}
-.summary{margin:0 0 30px; max-width:78ch}
-.summary h3{font-size:13px; font-weight:600; letter-spacing:.1em;
-  text-transform:uppercase; color:var(--ink-3); font-family:"Source Sans 3",sans-serif;
-  margin-bottom:12px}
-.summary p{margin:0 0 12px; font-size:15.5px; line-height:1.62; color:var(--ink)}
-.summary .mentions{font-size:14px; color:var(--ink-2); border-left:3px solid var(--accent);
-  padding:10px 0 10px 14px; background:var(--accent-soft); margin-top:4px}
-.summary .mentions b{color:var(--ink); font-weight:600}
-.summary .caveat-line{font-size:13.5px; color:var(--ink-2); margin-top:12px;
-  padding-top:10px; border-top:1px solid var(--rule)}
-.expect{border:1px solid var(--rule); background:var(--surface); padding:14px 16px;
-  margin:0 0 26px}
-.expect .s{font-size:15px; line-height:1.6; margin:0 0 8px}
-.expect .figs{display:flex; flex-wrap:wrap; gap:6px 20px; font-size:12.5px;
-  color:var(--ink-3); font-family:"IBM Plex Mono",monospace}
-.expect .figs b{color:var(--ink-2); font-weight:600}
-.expect .cav{font-size:12px; color:var(--ink-3); margin:9px 0 0; line-height:1.5}
-.tech-yrs{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--ink-3)}
-.ev{display:grid; gap:16px}
-.ev-group{border:1px solid var(--rule); background:var(--surface)}
-.ev-group.is-backed{border-color:var(--accent); box-shadow:inset 3px 0 0 var(--accent)}
-.ev-group.is-below{box-shadow:inset 3px 0 0 var(--d3)}
-.ev-head{display:flex; align-items:baseline; justify-content:space-between;
-  gap:12px; padding:10px 14px; border-bottom:1px solid var(--rule);
-  background:var(--surface-2)}
-.ev-head .t{font-size:12px; font-weight:600; letter-spacing:.07em;
-  text-transform:uppercase; color:var(--ink-2)}
-.ev-head .c{font-size:12px; color:var(--ink-3)}
-.ev-row{display:grid; grid-template-columns:1fr auto auto; gap:4px 12px;
-  padding:9px 14px; border-bottom:1px solid var(--rule); align-items:center}
-.ev-row:last-child{border-bottom:none}
-.ev-row .nm{font-size:14px; font-weight:500}
-.ev-row .d{font-family:"IBM Plex Mono",monospace; font-size:13.5px;
-  font-variant-numeric:tabular-nums; font-weight:600}
-.ev-row .n{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-3)}
-.ev-row .ci{grid-column:1/-1; display:flex; align-items:center; gap:9px;
-  font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--ink-3)}
-.ci-track{position:relative; flex:1; height:9px; background:var(--surface-3);
-  min-width:90px}
-.ci-track .zero{position:absolute; top:-2px; bottom:-2px; width:1px;
-  background:var(--rule-strong)}
-.ci-track .span{position:absolute; top:2px; height:5px; border-radius:3px}
-.ci-track .pt{position:absolute; top:0; width:3px; height:9px; background:var(--ink)}
-.ev-row .dt{grid-column:1/-1; font-size:12.5px; color:var(--ink-2); margin-top:2px}
-.ev-lead{font-size:15.5px; line-height:1.6; margin:0 0 6px}
-.ev-note{font-size:12.5px; color:var(--ink-3); margin:0 0 14px; max-width:74ch}
-.p-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(288px,1fr)); gap:30px}
-.p-block h3{margin-bottom:4px}
-.p-block .cap{font-size:12.5px; color:var(--ink-3); margin:0 0 12px}
-.bars{display:grid; grid-template-columns:auto 1fr auto; gap:3px 9px; align-items:center;
-  font-size:13px}
-.bars .lb{color:var(--ink-2); white-space:nowrap}
-.bars .tr{background:var(--surface-3); height:13px; position:relative}
-.bars .tr i{position:absolute; inset:0 auto 0 0; display:block}
-.bars .vl{font-family:"IBM Plex Mono",monospace; font-size:12.5px;
-  font-variant-numeric:tabular-nums; color:var(--ink-2)}
-.kv{display:grid; grid-template-columns:1fr auto; gap:4px 12px; font-size:13.5px}
-.kv .k{color:var(--ink-2)}
-.kv .v{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums;
-  color:var(--ink)}
-.pill-row{display:flex; flex-wrap:wrap; gap:6px; margin-top:4px}
-.pill{font-size:12px; padding:2px 9px; border-radius:11px; background:var(--surface-3);
-  color:var(--ink-2)}
-.pill b{color:var(--ink); font-weight:600}
-.rules{font-size:12.5px; color:var(--ink-3); margin-top:22px; padding-top:16px;
-  border-top:1px solid var(--rule); max-width:74ch}
-tr.clickable{cursor:pointer}
-tr.clickable:hover td{background:var(--surface-2)}
-
-footer{border-top:1px solid var(--rule-strong); padding-top:24px; color:var(--ink-3);
-  font-size:13px; max-width:74ch}
-footer h3{color:var(--ink-2); margin-bottom:7px}
-footer p{margin:0 0 11px}
-@media (max-width:560px){ .kpi .v{font-size:23px} }
-</style>
-
-<div class="wrap">
-<header class="top">
-  <svg class="contours" id="contours" aria-hidden="true"></svg>
-  <p class="eyebrow">Private Water Fishing &middot; member report archive</p>
-  <h1>Private Water Pattern Book</h1>
-  <p class="lede">Thirteen thousand member reports, read by rule and joined to the
-  weather each trip was fished under, pointed at one question: which lake is worth
-  booking, and what goes in the boat. Every figure below opens onto the trips it
-  came from.</p>
-  <p class="provenance" id="prov"></p>
-</header>
-
-<div id="index">
-
-<section id="planner">
-  <div class="daybar" id="daybar"></div>
-  <p class="wx" id="wx"></p>
-  <p class="note" id="plan-note"></p>
-
-  <div class="plan-grid">
-    <div>
-      <div style="overflow-x:auto"><table class="short" id="short"></table></div>
-      <div class="brief" id="brief"></div>
-    </div>
-    <div class="maprail">
-      <div class="mapbox" id="mapbox"></div>
-      <div class="scat" id="scat"></div>
-    </div>
-  </div>
-</section>
-
-<hr class="lateral">
-
-<div class="archive-head">
-  <h2>The archive behind it</h2>
-  <span class="tn">every number above comes from here</span>
-</div>
-
-<div class="kpis" id="kpis"></div>
-<p class="caveat" id="caveat"></p>
-
-<section>
-  <div class="shead"><h2 id="wk-title">Ranked for the weekend</h2></div>
-  <p class="note" id="wk-note"></p>
-  <div class="wk" id="weekend"></div>
-</section>
-
-<section>
-  <div class="shead"><h2>What the archive will tell you</h2></div>
-  <p class="note">Members write down what they caught and what they threw far more
-  reliably than they write down the water. Everything on the left is available on
-  almost every trip; everything on the right only exists when somebody mentioned it.
-  Figures drawn from the right-hand list carry their sample size everywhere they appear.</p>
-  <div class="tiers">
-    <div class="tier"><h3>Recorded almost every trip</h3>
-      <p class="sub">Structured fields, plus weather joined by lake and date</p>
-      <div class="cov" id="cov-full"></div></div>
-    <div class="tier"><h3>Only when a member wrote it</h3>
-      <p class="sub">Pulled from the narrative by pattern matching</p>
-      <div class="cov" id="cov-part"></div></div>
-  </div>
-</section>
-
-<section>
-  <div class="shead"><h2>Bait by month</h2><span class="tn" id="hm-n"></span></div>
-  <p class="note">Each cell compares a bait's catch rate against that month's own
-  baseline, so seasonal swings in the fishing don't masquerade as bait performance.
-  Rates are pulled toward the baseline in proportion to how thin the cell is.
-  Hatched cells are months where that bait was named on too few trips to score.</p>
-  <div class="hm-scroll"><table class="hm" id="hm"></table></div>
-  <div class="legend">
-    <span>Worse than the month's baseline</span>
-    <span class="sw"><i style="background:var(--d4)"></i><i style="background:var(--d3)"></i><i style="background:var(--d2)"></i><i style="background:var(--d1)"></i><i style="background:var(--dmid)"></i><i style="background:var(--u1)"></i><i style="background:var(--u2)"></i><i style="background:var(--u3)"></i><i style="background:var(--u4)"></i></span>
-    <span>Better</span>
-  </div>
-</section>
-
-<section>
-  <div class="shead"><h2>When the barometer moves</h2></div>
-  <p class="note">Trips grouped by the 24-hour pressure change at the lake on the day
-  they were fished. A front is the one condition anglers plan around, and it is on
-  record for every trip whether or not the member mentioned the weather. Restricted
-  to <span id="exact-n" class="num"></span> trips whose exact date is known from a
-  reservation &mdash; older reports carry a date estimated from when they were
-  posted, and a one-day error ruins a pressure reading.</p>
-  <div class="panels" id="pressure"></div>
-</section>
-
-<section>
-  <div class="shead"><h2>Under the sky you get</h2></div>
-  <p class="note">The same split by cloud cover.</p>
-  <div class="panels" id="clouds"></div>
-</section>
-
-<section>
-  <div class="shead"><h2>Water types</h2></div>
-  <p class="note">Lakes grouped by acreage, how clear members report the water, and how
-  often they mention vegetation. Any single report rarely describes the water, but a
-  lake with two hundred reports accumulates enough mentions to type it.</p>
-  <div class="cohorts" id="cohorts"></div>
-</section>
-
-<section>
-  <div class="shead"><h2>The lakes</h2><span class="tn">click a column to sort</span></div>
-  <p class="note">Lakes with at least fifteen reports. Catch rate is the median across
-  trips with a countable catch, normalised to fish per hour on the water.</p>
-  <div class="tbl-scroll"><table class="lakes" id="lakes"></table></div>
-</section>
-
-</div><!-- /#index -->
-
-<div id="profile"></div>
-
-<footer>
-  <h3>How to read this</h3>
-  <p>This is observational data, not an experiment. Popular baits get thrown more
-  often, and under different conditions, than rare ones; better anglers write more
-  reports; and only about three percent of reports admit a blank day, which is not a
-  believable rate. Everything here describes an association between what someone threw
-  and what they caught. None of it establishes cause.</p>
-  <p>Catch rates are shrunk toward the baseline of whatever slice they sit in, and
-  ranked on the conservative end of the estimate, so a bait that went well on four
-  trips does not outrank one that went well on four hundred. Sample sizes are printed
-  beside every figure for exactly this reason.</p>
-  <p>Built from public report pages by a rule-based pipeline: no model reads the
-  reports, and re-running it produces the same numbers. This page shows aggregates
-  only &mdash; no member names and no report text.</p>
-  <p id="gen" class="num"></p>
-</footer>
-</div>
-
-<script>
-const D = __DATA__;
-const $ = s => document.querySelector(s);
-const el = (t, c, x) => { const n = document.createElement(t); if (c) n.className = c;
-  if (x !== undefined) n.textContent = x; return n; };
-const baitName = b => D.bait_labels[b] || b;
-const fmt = (v, n = 2) => (v === null || v === undefined) ? "–" : Number(v).toFixed(n);
-
-/* ---- masthead + kpis ---- */
-const h = D.headline;
-$("#prov").innerHTML =
-  `<span><b>${h.reports.toLocaleString()}</b> reports</span>` +
-  `<span><b>${h.lakes}</b> lakes</span>` +
-  `<span><b>${h.first || "?"}</b> to <b>${h.last || "?"}</b></span>` +
-  `<span><b>${fmt(h.lake_known_pct, 1)}%</b> matched to a lake</span>`;
-$("#gen").textContent = "Generated " + D.generated;
-$("#caveat").innerHTML =
-  `The archive runs from <b>${h.first}</b>, but a catch <i>rate</i> needs both a fish ` +
-  `count and a half- or full-day window, and those fields only appear on reports from ` +
-  `about <b>${h.scored_from}</b> onward. Every rate on this page therefore rests on ` +
-  `<b>${h.scored.toLocaleString()}</b> trips from ${h.scored_from}–${h.scored_to}, not on all ` +
-  `${h.reports.toLocaleString()} reports. The older reports still contribute the baits ` +
-  `people threw and how they described the water.`;
-
-[["reports", h.reports.toLocaleString(), "reports read"],
- ["lakes", h.lakes, "lakes in the club"],
- ["scored", h.scored.toLocaleString(), "trips with a countable catch"],
- ["fph", fmt(h.median_fph), "median fish per hour"],
- ["best", h.best_lb ? fmt(h.best_lb, 1) + " lb" : "–", "heaviest fish reported"]
-].forEach(([, v, k]) => {
-  const d = el("div", "kpi"); d.append(el("div", "v", v), el("div", "k", k));
-  $("#kpis").append(d);
-});
-
-/* ---- coverage ---- */
-function coverage(target, rows) {
-  const box = $(target);
-  rows.forEach(r => {
-    box.append(el("div", "lab", r.dimension), el("div", "pc", fmt(r.pct, 0) + "%"));
-    const bar = el("div", "bar"), fill = el("i");
-    fill.style.width = Math.min(100, r.pct) + "%";
-    bar.append(fill); box.append(bar);
-  });
-}
-coverage("#cov-full", D.coverage.filter(r => r.tier === "full"));
-coverage("#cov-part", D.coverage.filter(r => r.tier === "partial"));
-
-/* ---- heatmap ---- */
-const STEPS = [
-  [0.55, "--d4"], [0.72, "--d3"], [0.86, "--d2"], [0.95, "--d1"],
-  [1.05, "--dmid"], [1.16, "--u1"], [1.32, "--u2"], [1.55, "--u3"], [Infinity, "--u4"]
-];
-const DARKSTEP = { "--d4": 1, "--u4": 1 };
-function cellColor(lift) { for (const [hi, v] of STEPS) if (lift < hi) return v; return "--u4"; }
-
-(function heatmap() {
-  const t = $("#hm"), hm = D.heatmap;
-  const byKey = new Map(hm.cells.map(c => [c.bait + "|" + c.month, c]));
-  const head = t.insertRow();
-  head.append(el("th", "rowh", ""));
-  hm.months.forEach(m => head.append(el("th", null, m)));
-  let scored = 0;
-  hm.baits.forEach(b => {
-    const row = t.insertRow();
-    row.append(el("th", "rowh", baitName(b)));
-    for (let m = 1; m <= 12; m++) {
-      const c = byKey.get(b + "|" + m), td = row.insertCell();
-      if (!c) { td.className = "void"; td.textContent = "·";
-        td.title = baitName(b) + " — fewer than " + hm.min_cell + " trips this month";
-        continue; }
-      scored++;
-      const tok = cellColor(c.lift);
-      td.style.background = "var(" + tok + ")";
-      td.style.color = DARKSTEP[tok] ? "var(--on-dark)" : "var(--on-light)";
-      td.textContent = c.lift.toFixed(2);
-      td.title = `${baitName(b)} in ${hm.months[m - 1]}\n` +
-        `${c.lift.toFixed(2)}x the month baseline\n` +
-        `${fmt(c.fph)} fish/hr across ${c.n} trips`;
-    }
-  });
-  $("#hm-n").textContent = scored + " scored cells";
-})();
-
-/* ---- condition panels ---- */
-function panels(target, rows, labels) {
-  const box = $(target);
-  if (!rows.length) { box.append(el("div", "panel", "Not enough data yet.")); return; }
-  rows.forEach(r => {
-    const p = el("div", "panel");
-    const head = el("div", "ph");
-    head.append(el("div", "pv", fmt(r.median_fph)), el("div", "pn", r.n + " trips"));
-    p.append(el("h3", null, labels[r.value] || r.value), head);
-    const note = el("div", "pn", "median fish/hr"); note.style.marginTop = "2px";
-    p.append(note);
-    const ol = el("ol");
-    r.top.forEach(b => {
-      const li = el("li");
-      const chip = el("span", "chip", b.lift.toFixed(2) + "x");
-      const tok = cellColor(b.lift);
-      chip.style.background = "var(" + tok + ")";
-      chip.style.color = DARKSTEP[tok] ? "var(--on-dark)" : "var(--on-light)";
-      li.append(el("span", null, baitName(b.bait)), chip, el("span", "tn", "n=" + b.n));
-      ol.append(li);
-    });
-    p.append(ol); box.append(p);
-  });
-}
-const exn = document.getElementById("exact-n");
-if (exn) exn.textContent = (D.exact_trips || 0).toLocaleString();
-panels("#pressure", D.pressure, D.trend_labels);
-panels("#clouds", D.clouds, D.trend_labels);
-
-/* ---- cohorts ---- */
-(function cohorts() {
-  const box = $("#cohorts");
-  D.cohorts.forEach(c => {
-    const d = el("div", "cohort" + (c.cohort === "small_clear_grassy" ? " is-focus" : ""));
-    d.append(el("h3", null, D.cohort_labels[c.cohort] || c.cohort));
-    d.append(el("div", "meta",
-      `${c.lakes} lakes · ${c.trips} trips · median ${fmt(c.median_acres, 0)} acres · ${fmt(c.median_fph)} fish/hr`));
-    const ul = el("ul");
-    c.top.forEach(b => {
-      const li = el("li");
-      li.append(el("span", null, baitName(b.bait)),
-                el("span", "tn", b.lift.toFixed(2) + "x  n=" + b.n));
-      ul.append(li);
-    });
-    d.append(ul); box.append(d);
-  });
-})();
+// Kicked off at the very bottom of the script instead of here: drawBrief()
+// calls bars(), which reads a const declared further down for the profile
+// charts. Running at this point hits its temporal dead zone and throws before
+// anything renders.
 
 /* ---- weekend panel ---- */
 (function weekend() {
@@ -1598,6 +1597,13 @@ window.addEventListener("hashchange", route);
   }
   draw();
 })();
+
+/* ---- start the planner, after every definition above ---- */
+if (P.days) {
+  const firstDay = dayData().shortlist || [];
+  selLake = firstDay.length ? firstDay[0].lake : null;
+  drawPlanner();
+}
 
 route();
 </script>

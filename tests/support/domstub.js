@@ -35,3 +35,17 @@ globalThis.document={
 globalThis.window={addEventListener(){},scrollTo(){}};
 globalThis.location={hash:""};
 globalThis.__made=made;
+
+// Record which render paths actually ran, so a test can assert the planner
+// built something rather than merely that the file parsed.
+globalThis.__drew = {};
+const _cens = globalThis.document.createElementNS;
+globalThis.document.createElementNS = (ns, t) => {
+  if (t === "path") globalThis.__drew.map = true;
+  return _cens(ns, t);
+};
+const _qs = globalThis.document.querySelector;
+globalThis.document.querySelector = (sel) => {
+  if (sel === "#brief") globalThis.__drew.brief = true;
+  return _qs(sel);
+};
