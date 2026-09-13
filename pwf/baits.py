@@ -22,12 +22,12 @@ from __future__ import annotations
 
 import math
 
-import numpy as np
 import pandas as pd
 
-Z = 1.96
+from .effect import MIN_STRATUM, Z, bait_count_strata, classify, interval
+from .effect import stratified_effect
+
 MIN_TRIPS = 6
-MIN_STRATUM = 4
 # A bait needs this many trips before an interval excluding zero is called
 # backed rather than merely suggestive.
 BACKED_MIN_TRIPS = 15
@@ -36,52 +36,14 @@ BACKED_MIN_TRIPS = 15
 SUGGESTIVE_MIN_TRIPS = 12
 
 SUPPORT_ORDER = {"backed": 0, "suggestive": 1, "unproven": 2, "thin": 3,
-                 "below": 4}
-
-
-def _stratified_diff(used: pd.Series, other: pd.Series,
-                     strata: pd.Series) -> tuple[float, float, int] | None:
-    """Difference in catch rate, matched on how many baits the trip named.
-
-    Each stratum contributes its own difference; strata are combined by inverse
-    variance, which is the standard way to pool independent estimates and gives
-    the better-sampled strata the weight they deserve.
-    """
-    diffs, weights, n_used = [], [], 0
-    for key in strata.unique():
-        u = used[strata.loc[used.index] == key] if len(used) else used
-        o = other[strata.loc[other.index] == key] if len(other) else other
-        if len(u) < MIN_STRATUM or len(o) < MIN_STRATUM:
-            continue
-        var = u.var(ddof=1) / len(u) + o.var(ddof=1) / len(o)
-        if not var or var != var or var <= 0:
-            continue
-        diffs.append(u.mean() - o.mean())
-        weights.append(1.0 / var)
-        n_used += len(u)
-    if not diffs:
-        return None
-    w = np.array(weights)
-    d = np.array(diffs)
-    diff = float((w * d).sum() / w.sum())
-    se = float(math.sqrt(1.0 / w.sum()))
-    return diff, se, n_used
+                 "unstable": 4, "below": 5}
 
 
 def _classify(diff: float, lo: float, hi: float, n: int) -> str:
-    if n < MIN_TRIPS:
-        return "thin"
-    if hi < 0:
-        return "below"
-    if lo > 0:
-        if n >= BACKED_MIN_TRIPS:
-            return "backed"
-        # An interval can exclude zero on a handful of trips and still be far
-        # too wide to headline a lake with.
-        return "suggestive" if n >= SUGGESTIVE_MIN_TRIPS else "thin"
-    if diff > 0 and lo > -0.25 and n >= SUGGESTIVE_MIN_TRIPS:
-        return "suggestive"
-    return "unproven"
+    """Bait support. No year-stability check yet - see effect.year_consistency
+    and pwf/technique.py, where the same filter is applied and does real work."""
+    return classify(diff, lo, hi, n, MIN_TRIPS, SUGGESTIVE_MIN_TRIPS,
+                    BACKED_MIN_TRIPS)
 
 
 def bait_evidence(trips: pd.DataFrame, lures: pd.DataFrame,
@@ -97,11 +59,9 @@ def bait_evidence(trips: pd.DataFrame, lures: pd.DataFrame,
     if mine.empty:
         return []
 
-    # How many distinct baits each trip named - the thing being matched on.
-    per_trip = mine.groupby("report_id")[level].nunique()
     sel = scored.set_index("report_id")
     sel = sel[~sel.index.duplicated()]
-    strata = per_trip.reindex(sel.index).fillna(0).clip(upper=5).astype(int)
+    strata = bait_count_strata(mine, sel.index, level=level)
     rates = sel["fish_per_hour"]
     baseline = float(rates.mean())
 
@@ -115,7 +75,7 @@ def bait_evidence(trips: pd.DataFrame, lures: pd.DataFrame,
         if len(other) < MIN_STRATUM:
             continue
 
-        res = _stratified_diff(used, other, strata)
+        res = stratified_effect(used, other, strata)
         naive = float(used.mean() - other.mean()) if len(other) else None
         if res is None:
             # Not enough matched strata to say anything defensible.
@@ -128,7 +88,7 @@ def bait_evidence(trips: pd.DataFrame, lures: pd.DataFrame,
             continue
 
         diff, se, _n = res
-        lo, hi = diff - Z * se, diff + Z * se
+        lo, hi = interval(diff, se)
         out.append({
             "bait": bait,
             "trips": int(len(used)),

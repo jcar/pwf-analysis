@@ -234,6 +234,14 @@ body.profile-open #profile{display:block}
 .summary .mentions b{color:var(--ink); font-weight:600}
 .summary .caveat-line{font-size:13.5px; color:var(--ink-2); margin-top:12px;
   padding-top:10px; border-top:1px solid var(--rule)}
+.expect{border:1px solid var(--rule); background:var(--surface); padding:14px 16px;
+  margin:0 0 26px}
+.expect .s{font-size:15px; line-height:1.6; margin:0 0 8px}
+.expect .figs{display:flex; flex-wrap:wrap; gap:6px 20px; font-size:12.5px;
+  color:var(--ink-3); font-family:"IBM Plex Mono",monospace}
+.expect .figs b{color:var(--ink-2); font-weight:600}
+.expect .cav{font-size:12px; color:var(--ink-3); margin:9px 0 0; line-height:1.5}
+.tech-yrs{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--ink-3)}
 .ev{display:grid; gap:16px}
 .ev-group{border:1px solid var(--rule); background:var(--surface)}
 .ev-group.is-backed{border-color:var(--accent); box-shadow:inset 3px 0 0 var(--accent)}
@@ -684,6 +692,86 @@ function baitEvidence(baits) {
   return box;
 }
 
+function whatToExpect(cons) {
+  const box = el("div", "p-block");
+  box.append(el("h3", null, "What to expect"));
+  const card = el("div", "expect");
+  card.append(el("p", "s", cons.sentence));
+  const figs = el("div", "figs");
+  figs.innerHTML =
+    `volatility <b>${cons.cv}</b> (${cons.band})` +
+    ` · best day in ten <b>${cons.best_decile}</b> fish/hr` +
+    ` · worst <b>${cons.worst_decile}</b>` +
+    ` · over <b>${cons.trips}</b> trips`;
+  card.append(figs);
+  card.append(el("p", "cav",
+    "Spread is history, not a forecast: a lake's volatility in past years " +
+    "predicts the next year's at only about r=0.20, against r=0.65 for its " +
+    "catch rate. Bust rate also largely restates the average — good lakes " +
+    "blank less — so volatility is the figure that adds something the rate " +
+    "does not already carry."));
+  box.append(card);
+  return box;
+}
+
+const TECH_LABEL = {
+  backed: ["Holds up across the archive", "is-backed"],
+  suggestive: ["Leaning that way", ""],
+  unproven: ["Not separated from the rest", ""],
+  unstable: ["Significant on paper, inconsistent year to year", ""],
+  below: ["Behind the alternatives", "is-below"],
+};
+
+function techniqueEvidence(tech) {
+  const club = (D.technique_club || {}).effects || [];
+  if (!club.length) return null;
+  const sum = (D.technique_club || {}).summary || {};
+  const local = {};
+  (tech.lake || []).forEach(e => { local[e.technique] = e; });
+
+  const box = el("div", "p-block");
+  box.append(el("h3", null, "How you fish it"));
+  if (sum.lead) box.append(el("p", "ev-lead", sum.lead + "."));
+  box.append(el("p", "ev-note",
+    "Presentation, measured across the whole archive and matched the same way " +
+    "as baits. The years column counts how many separate years agree with the " +
+    "pooled result — trips cluster within seasons, so a pooled interval runs " +
+    "narrow, and anything marked inconsistent clears it and then flips sign in " +
+    "half the years it appears in. Where this lake has enough of its own trips, " +
+    "its figure sits beside the club's."));
+
+  const scale = Math.max(1, ...club.map(e => Math.max(Math.abs(e.lo), Math.abs(e.hi))));
+  const wrap = el("div", "ev");
+  ["backed", "suggestive", "unproven", "unstable", "below"].forEach(key => {
+    const group = club.filter(e => e.support === key);
+    if (!group.length) return;
+    const [label, cls] = TECH_LABEL[key];
+    const g = el("div", "ev-group" + (cls ? " " + cls : ""));
+    const head = el("div", "ev-head");
+    head.append(el("div", "t", label), el("div", "c", group.length + " of " + club.length));
+    g.append(head);
+    group.forEach(e => {
+      const row = el("div", "ev-row");
+      row.append(el("div", "nm", e.label));
+      const d = el("div", "d", `${e.diff >= 0 ? "+" : ""}${e.diff.toFixed(2)} fish/hr`);
+      d.style.color = e.lo > 0 ? "var(--u4)" : e.hi < 0 ? "var(--d4)" : "var(--ink-2)";
+      row.append(d);
+      row.append(el("div", "n", `${e.trips} trips`));
+      row.append(ciBar(e, scale));
+      const here = local[e.technique];
+      const bits = [];
+      if (e.years) bits.push(`${e.years_agreeing} of ${e.years} years agree`);
+      if (here) bits.push(`here: ${here.diff >= 0 ? "+" : ""}${here.diff.toFixed(2)} ` +
+                          `over ${here.trips} trips`);
+      if (bits.length) row.append(el("div", "dt", bits.join(" · ")));
+      g.append(row);
+    });
+    wrap.append(g);
+  });
+  box.append(wrap);
+  return box;
+}
+
 function renderProfile(name) {
   const p = D.profiles[name];
   const host = $("#profile");
@@ -740,8 +828,14 @@ function renderProfile(name) {
     host.append(box);
   }
 
+  const cons = p.consistency || {};
+  if (cons.sentence) host.append(whatToExpect(cons));
+
   const baits = p.baits || {};
   if ((baits.evidence || []).length) host.append(baitEvidence(baits));
+
+  const techBlock = techniqueEvidence(p.technique || {});
+  if (techBlock) host.append(techBlock);
 
   const grid = el("div", "p-grid");
 

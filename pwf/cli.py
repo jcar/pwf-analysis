@@ -196,6 +196,94 @@ def _render_baits(baits: dict) -> None:
     console.rule(style="dim")
 
 
+def _render_technique(tech: dict) -> None:
+    """Club-wide presentation effects, with this lake's own beside them."""
+    club = tech.get("club") or []
+    if not club:
+        return
+    from .technique import summary as _tsummary
+    s = _tsummary(club)
+    local = {e["technique"]: e for e in (tech.get("lake") or [])}
+
+    console.print()
+    console.rule("[bold]How you fish it[/bold]", style="dim")
+    console.print(f"[bold]{s['lead']}.[/bold]")
+    rows = []
+    for key in ("backed", "suggestive", "below", "unstable"):
+        for e in s.get(key) or []:
+            here = local.get(e["technique"])
+            rows.append([
+                e["label"][:19], e["trips"], f"{e['diff']:+.2f}",
+                f"{e['lo']:+.2f} to {e['hi']:+.2f}",
+                f"{e['years_agreeing']}/{e['years']}" if e["years"] else "-",
+                key,
+                f"{here['diff']:+.2f} n={here['trips']}" if here else "-",
+            ])
+    if rows:
+        _table("Presentation, club-wide",
+               ["technique", "trips", "vs others", "95% CI", "yrs", "support",
+                "here"],
+               rows,
+               caption="'years' counts how many separate years agree with the "
+                       "pooled sign. Trips cluster within seasons, so a pooled "
+                       "interval runs narrow - anything marked unstable clears "
+                       "it and then flips sign in half the years it appears in.")
+    console.rule(style="dim")
+
+
+def _render_consistency(cons: dict) -> None:
+    if not cons or not cons.get("sentence"):
+        return
+    from .consistency import CAVEAT
+    console.print(f"\n[bold]what to expect[/bold]  {cons['sentence']}", width=88)
+    console.print(
+        f"[dim]volatility {cons['cv']} ({cons['band']}); best one day in ten "
+        f"{cons['best_decile']} fish/hr, worst {cons['worst_decile']}. "
+        f"{CAVEAT}[/dim]", width=88)
+
+
+@app.command()
+def techniques(lake: str = typer.Option(None, help="Scope to one lake"),
+               min_trips: int = typer.Option(None)):
+    """How you fish it: presentation effects across the archive."""
+    from .technique import (lake_technique_effects, summary,
+                            technique_effects)
+
+    conn = _db()
+    trips, lures, tags = (A.trips_frame(conn), A.lures_frame(conn),
+                          A.tags_frame(conn))
+    if lake:
+        sel = trips[trips["lake"].fillna("").str.lower() == lake.lower()]
+        if sel.empty:
+            console.print(f"[red]No trips for {lake!r}.[/red]")
+            raise typer.Exit(1)
+        ids = set(sel["report_id"])
+        ev = lake_technique_effects(
+            sel, tags[tags["report_id"].isin(ids)],
+            lures[lures["report_id"].isin(ids)])
+        title = f"Presentation at {sel['lake'].iloc[0]}"
+        note = ("per-lake samples are thin and are not year-checked; read them "
+                "as local colour beside the club-wide table")
+    else:
+        ev = technique_effects(trips, tags, lures, min_trips=min_trips)
+        title = "Presentation, club-wide"
+        note = ("'years' counts how many separate years agree with the pooled "
+                "sign; unstable means the interval excludes zero but the sign "
+                "does not hold")
+    if not ev:
+        console.print("[yellow]Not enough technique data for that slice.[/yellow]")
+        raise typer.Exit(1)
+
+    console.print(f"\n[bold]{summary(ev)['lead']}.[/bold]")
+    _table(title,
+           ["technique", "trips", "vs others", "95% CI", "yrs", "support"],
+           [[e["label"][:20], e["trips"], f"{e['diff']:+.2f}",
+             f"{e['lo']:+.2f} to {e['hi']:+.2f}",
+             f"{e['years_agreeing']}/{e['years']}" if e["years"] else "-",
+             e["support"]] for e in ev],
+           caption=note)
+
+
 @app.command()
 def lake(name: str, season: str = typer.Option(None, help="Show baits for one season")):
     """Full profile for one lake - everything worth knowing before a trip."""
@@ -203,8 +291,17 @@ def lake(name: str, season: str = typer.Option(None, help="Show baits for one se
     from .profile import lake_profile
     from .summarize import mention_index
 
+    from .consistency import club_bust_rate, lake_consistency
+    from .technique import technique_effects
+
     conn = _db()
-    p = lake_profile(conn, name, mentions=mention_index(conn, str(DB_PATH)))
+    trips, lures = A.trips_frame(conn), A.lures_frame(conn)
+    cons = lake_consistency(trips)
+    cons["__club_bust__"] = club_bust_rate(trips)
+    p = lake_profile(conn, name, trips=trips, lures=lures,
+                     mentions=mention_index(conn, str(DB_PATH)),
+                     club_technique=technique_effects(trips, A.tags_frame(conn), lures),
+                     consistency=cons)
     if "error" in p:
         console.print(f"[red]{p['error']}[/red]  Try `pwf lakes`.")
         raise typer.Exit(1)
@@ -289,6 +386,9 @@ def lake(name: str, season: str = typer.Option(None, help="Show baits for one se
     else:
         _render_baits(baits)
 
+    _render_technique(p.get("technique") or {})
+    _render_consistency(p.get("consistency") or {})
+
     w = p["water"]
     console.print(
         f"\n[bold]water[/bold]  clarity {_fmt(w['clarity_ft_median'], 1)} ft "
@@ -353,31 +453,37 @@ def weekend(when: str = typer.Option(None, "--date", help="YYYY-MM-DD (default: 
 
     # Keep the table narrow enough not to wrap lake names in a normal terminal.
     basis_short = {"lake-month": "month", "lake-year": "annual", "club": "club"}
-    cols = ["lake", "mi", "fish/hr", "n", "from", "$", "forecast"]
+    cols = ["lake", "mi", "fish/hr", "n", "from", "$", "spread", "bust"]
     rows = []
     for L in out["lakes"]:
-        fc = L["forecast"] or {}
-        forecast = (f"{_fmt(fc.get('temp_max_f'),0)}F {_fmt(fc.get('wind_max_mph'),0)}mph"
-                    if fc else "-")
+        cs = L.get("consistency") or {}
         rows.append([
-            L["lake"][:24],
+            L["lake"][:22],
             f"{L['miles']:.0f}" if L["miles"] is not None else "-",
             _fmt(L["expected_fph"]),
             f"{L['n_total']}{'*' if L['confidence'] in ('thin','very thin') else ''}",
             basis_short.get(L["basis"], L["basis"]),
             f"{L['day_rate']:.0f}" if L["day_rate"] else "-",
-            forecast,
+            cs.get("band") or "-",
+            f"{cs['bust_rate']:.0f}%" if cs.get("bust_rate") is not None else "-",
         ])
     _table(f"Best bets for {out['date']}", cols, rows,
            caption="expected catch rate for this lake in this month, backtested at "
                    "r~0.65 on held-out years. 'from' = month means the lake has "
-                   "data for this month; annual means its year-round average stands "
-                   "in. * marks a thin sample.")
+                   "data for this month; annual means its year-round average "
+                   "stands in. * marks a thin sample. 'spread' and 'bust' are "
+                   "history, not forecast, and do not affect the order.")
 
     top = out["lakes"][0]
     if top["top_baits"]:
         console.print(f"[bold]{top['lake']}[/bold] baits: " + ", ".join(
             f"{b['bait']} ({b['n']} trips, {b['lift']:.2f}x)" for b in top["top_baits"]))
+
+    if out.get("club_bust_rate") is not None:
+        from .consistency import CAVEAT
+        console.print(
+            f"\n[dim]'bust' is the share of trips that came back with 2 fish or "
+            f"fewer; club-wide that is {out['club_bust_rate']:.0f}%. {CAVEAT}[/dim]")
 
     if out["forecast_available"]:
         console.print(

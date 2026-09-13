@@ -69,7 +69,9 @@ def _counts(series: pd.Series, total: int, top: int = 8) -> list[dict]:
 def lake_profile(conn: sqlite3.Connection, lake: str,
                  trips: pd.DataFrame | None = None,
                  lures: pd.DataFrame | None = None,
-                 mentions: dict | None = None) -> dict:
+                 mentions: dict | None = None,
+                 club_technique: list | None = None,
+                 consistency: dict | None = None) -> dict:
     """Assemble one lake's profile.
 
     Frames and the mention index may be passed in to avoid rebuilding them when
@@ -109,9 +111,44 @@ def lake_profile(conn: sqlite3.Connection, lake: str,
         "water": _water(conn, sel, ids),
         "fish": _fish(conn, sel, ids),
         "conditions": _conditions(scored),
+        "technique": _technique(conn, sel, mine_lures, ids, club_technique),
+        "consistency": _consistency(first["lake"], sel, trips, consistency),
     }
     prof["summary"] = _summary(prof, first["lake"], mentions)
     return prof
+
+
+def _technique(conn, sel, mine_lures, ids, club_technique) -> dict:
+    """How people fish this lake, against the club-wide picture.
+
+    Per-lake samples are thin, so the club-wide effects - which survive a
+    year-by-year stability check - are the reliable part, and this lake's own
+    numbers sit beside them as local colour.
+    """
+    from .technique import lake_technique_effects, summary
+
+    tags = pd.read_sql_query(
+        "SELECT report_id, kind, value FROM report_tags WHERE kind='technique'",
+        conn)
+    tags = tags[tags["report_id"].isin(ids)]
+    local = lake_technique_effects(sel, tags, mine_lures) if not tags.empty else []
+    return {"club": club_technique or [], "lake": local,
+            "lake_summary": summary(local) if local else {}}
+
+
+def _consistency(lake, sel, trips, precomputed) -> dict:
+    from .consistency import club_bust_rate, describe, lake_consistency
+
+    if precomputed is not None:
+        entry = precomputed.get(lake, {})
+        club = precomputed.get("__club_bust__")
+    else:
+        entry = lake_consistency(sel).get(lake, {})
+        club = club_bust_rate(trips)
+    if not entry:
+        return {}
+    return {**entry, "club_bust_rate": club,
+            "sentence": describe(entry, club)}
 
 
 def _summary(prof: dict, lake: str, mentions: dict | None) -> dict:
@@ -342,13 +379,22 @@ def all_profiles(conn: sqlite3.Connection, min_reports: int = 8) -> dict[str, di
     lures = A.lures_frame(conn)
     if trips.empty:
         return {}
+    from .consistency import club_bust_rate, lake_consistency
+    from .technique import technique_effects
+
     mentions = mention_index(conn, str(DB_PATH))
+    tags = A.tags_frame(conn)
+    club_tech = technique_effects(trips, tags, lures)
+    cons = lake_consistency(trips)
+    cons["__club_bust__"] = club_bust_rate(trips)
+
     counts = trips[trips["lake_known"] == 1]["lake"].value_counts()
     names = [n for n, c in counts.items() if c >= min_reports]
     out = {}
     for name in names:
         prof = lake_profile(conn, name, trips=trips, lures=lures,
-                            mentions=mentions)
+                            mentions=mentions, club_technique=club_tech,
+                            consistency=cons)
         if "error" not in prof:
             out[name] = prof
     return out

@@ -225,6 +225,13 @@ def recommend(conn: sqlite3.Connection, when: date | None = None,
         " membership_tier, day_rate, half_day_rate, region"
         " FROM lakes WHERE lat IS NOT NULL AND report_count > 0").fetchall()
 
+    # How steady each lake has been. Shown, never scored - past volatility
+    # predicts future volatility at only r~0.20, so it informs the choice
+    # without pretending to forecast it.
+    from .consistency import club_bust_rate, lake_consistency
+    consistency = lake_consistency(trips)
+    club_bust = club_bust_rate(trips)
+
     # One request covers every grid cell the club occupies.
     forecasts: dict = {}
     if with_forecast:
@@ -275,14 +282,18 @@ def recommend(conn: sqlite3.Connection, when: date | None = None,
                          ("temp_max_f", "wind_max_mph", "wind_band", "cloud_pct",
                           "cloud_band", "precip_in", "pressure_trend",
                           "pressure_delta_24h")} if fc else None,
+            "consistency": _slim_consistency(consistency.get(lk["name"])),
             "top_baits": [{"bait": i, "n": int(r["n_trips"]),
                            "lift": round(float(r["lift"]), 2)}
                           for i, r in top.head(3).iterrows()],
         })
 
+    # Sort on the score alone. Consistency rides along as a column so that a
+    # long drive to the club's swingiest lake is a choice, not a surprise.
     rows.sort(key=lambda r: -r["score"])
     return {
         "date": when.isoformat(),
+        "club_bust_rate": club_bust,
         "month_name": when.strftime("%B"),
         "max_miles": max_miles,
         "cohort": cohort,
@@ -292,6 +303,14 @@ def recommend(conn: sqlite3.Connection, when: date | None = None,
         "lakes": rows[:limit],
         "considered": len(rows),
     }
+
+
+def _slim_consistency(entry: dict | None) -> dict | None:
+    if not entry:
+        return None
+    return {k: entry[k] for k in
+            ("cv", "band", "bust_rate", "worst_decile", "typical_fish", "trips")
+            if k in entry}
 
 
 def _next_saturday(today: date | None = None) -> date:

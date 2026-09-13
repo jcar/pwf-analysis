@@ -183,3 +183,44 @@ class TestOutputShape:
         d = bait_detail(trips, lures, "topwater")
         assert d["subtypes"][0]["value"] == "frog"
         assert d["from_field"] == 6
+
+
+class TestEstimatorExtraction:
+    """The stratified estimator moved to pwf/effect.py so techniques could use
+    it. These pin that the move was behaviour-preserving and that baits still
+    route through the shared code rather than a drifting copy."""
+
+    def test_baits_uses_the_shared_estimator(self):
+        import inspect
+
+        import pwf.baits as b
+        src = inspect.getsource(b)
+        assert "from .effect import" in src
+        assert "def _stratified_diff" not in src, "a local copy has come back"
+
+    def test_shared_estimator_reproduces_a_hand_computation(self):
+        import numpy as np
+        import pandas as pd
+
+        from pwf.effect import stratified_effect
+        rng = np.random.default_rng(4)
+        idx = list(range(120))
+        rates = pd.Series(rng.normal(5, 1.5, 120), index=idx)
+        strata = pd.Series([0] * 60 + [1] * 60, index=idx)
+        used = rates.loc[list(range(0, 60, 2)) + list(range(60, 120, 2))]
+        other = rates.drop(index=used.index)
+        got = stratified_effect(used, other, strata)
+        assert got is not None
+        diff, se, n = got
+        # Recompute the inverse-variance combination independently.
+        parts = []
+        for k in (0, 1):
+            u = used[strata.reindex(used.index) == k]
+            o = other[strata.reindex(other.index) == k]
+            v = u.var(ddof=1) / len(u) + o.var(ddof=1) / len(o)
+            parts.append((u.mean() - o.mean(), 1 / v))
+        w = np.array([p[1] for p in parts])
+        d = np.array([p[0] for p in parts])
+        assert diff == pytest.approx(float((w * d).sum() / w.sum()))
+        assert se == pytest.approx(float(np.sqrt(1 / w.sum())))
+        assert n == len(used)

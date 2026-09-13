@@ -40,7 +40,8 @@ def collect(conn: sqlite3.Connection) -> dict:
     # one-day error destroys a pressure reading, so they are excluded here.
     exact = scored[scored["trip_date_source"] == "reservation"]
 
-    out: dict = {"profiles": _profiles(conn, trips, lures),
+    out: dict = {"technique_club": _technique_club(conn, trips, lures),
+                 "profiles": _profiles(conn, trips, lures),
                  "weekend": _weekend(conn),
                  "headline": _headline(conn, trips, scored),
                  "coverage": _coverage(conn),
@@ -238,6 +239,13 @@ def _slim(prof: dict) -> dict:
     summ = prof.get("summary") or {}
     if summ:
         summ["mentions"] = summ.get("mentions", [])[:8]
+    tech = prof.get("technique") or {}
+    if tech:
+        # The club-wide table is identical for every lake; it is emitted once at
+        # the top level instead of 152 times.
+        tech.pop("club", None)
+        tech["lake"] = (tech.get("lake") or [])[:8]
+        tech.pop("lake_summary", None)
     return prof
 
 
@@ -254,3 +262,15 @@ def _weekend(conn) -> dict:
     for row in out.get("lakes", []):
         row.pop("forecast", None)
     return out
+
+
+def _technique_club(conn, trips, lures) -> dict:
+    """Club-wide presentation effects, emitted once and shared by every lake."""
+    from pwf import analysis as _A
+    from pwf.technique import summary, technique_effects
+
+    ev = technique_effects(trips, _A.tags_frame(conn), lures)
+    if not ev:
+        return {}
+    keep = [e for e in ev if e["support"] != "thin"][:14]
+    return {"effects": keep, "summary": summary(keep)}
