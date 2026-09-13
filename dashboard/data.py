@@ -40,7 +40,9 @@ def collect(conn: sqlite3.Connection) -> dict:
     # one-day error destroys a pressure reading, so they are excluded here.
     exact = scored[scored["trip_date_source"] == "reservation"]
 
-    out: dict = {"headline": _headline(conn, trips, scored),
+    out: dict = {"profiles": _profiles(conn, trips, lures),
+                 "weekend": _weekend(conn),
+                 "headline": _headline(conn, trips, scored),
                  "coverage": _coverage(conn),
                  "by_month": _by_month(scored),
                  "heatmap": _heatmap(trips, lures),
@@ -191,3 +193,54 @@ def _cohorts(trips, lures) -> list[dict]:
             "top": [{"bait": i, "lift": _num(r["lift_lb"]), "n": int(r["n_trips"])}
                     for i, r in lift.head(5).iterrows()]})
     return sorted(out, key=lambda c: -c["trips"])
+
+def _profiles(conn, trips, lures) -> dict:
+    """One profile per lake, embedded so a click opens instantly with no
+    network round-trip. Aggregates only - no member names, no report text."""
+    from pwf.profile import lake_profile
+
+    counts = trips[trips["lake_known"] == 1]["lake"].value_counts()
+    out = {}
+    for name, n in counts.items():
+        if n < 8:
+            continue
+        prof = lake_profile(conn, name, trips=trips, lures=lures)
+        if "error" not in prof:
+            out[name] = _slim(prof)
+    return out
+
+
+def _slim(prof: dict) -> dict:
+    """Trim a profile to what the page actually renders, so the payload stays
+    small enough to ship inside the page."""
+    prof = dict(prof)
+    prof["by_month"] = [m for m in prof["by_month"] if m["n"]]
+    prof["by_year"] = prof["by_year"][-8:]
+    baits = prof["baits"]
+    prof["baits"] = {
+        "overall": baits["overall"][:8],
+        "subtype": baits["subtype"][:8],
+        "by_season": {k: v[:4] for k, v in baits["by_season"].items()},
+    }
+    w = prof["water"]
+    for key, keep in (("vegetation", 6), ("structure", 7), ("technique", 6),
+                      ("clarity_labels", 4), ("veg_density", 4)):
+        w[key] = w.get(key, [])[:keep]
+    f = prof["fish"]
+    f["species"] = f["species"][:5]
+    return prof
+
+
+def _weekend(conn) -> dict:
+    """Next Saturday's ranking. Built without a forecast call: the page is a
+    static snapshot, and a forecast baked in at publish time would go stale and
+    read as current. The ranking itself does not use one."""
+    from pwf.recommend import recommend
+
+    try:
+        out = recommend(conn, max_miles=200, limit=12, with_forecast=False)
+    except Exception:
+        return {}
+    for row in out.get("lakes", []):
+        row.pop("forecast", None)
+    return out
