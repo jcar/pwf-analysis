@@ -241,6 +241,64 @@ class TestPageActuallyRuns:
                    "drawPlanner", "selectLake", "citeTable"):
             assert f"function {fn}" in script, f"{fn} not in the script block"
 
+    def _run_js(self, tail: str):
+        """Execute the page's real script against the DOM stub, plus `tail`."""
+        import shutil
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        if not shutil.which("node"):
+            pytest.skip("node not available")
+        stub = Path("tests/support/domstub.js")
+        if not stub.exists():
+            pytest.skip("dom stub missing")
+        m = re.search(r"(?s)<script>(.*)</script>", _page())
+        assert m, "no script block"
+        with tempfile.NamedTemporaryFile("w", suffix=".mjs", delete=False,
+                                         encoding="utf-8") as f:
+            f.write(stub.read_text() + "\n" + m.group(1) + "\n" + tail)
+            path = f.name
+        try:
+            return subprocess.run(["node", path], capture_output=True,
+                                  text=True, timeout=120)
+        finally:
+            Path(path).unlink(missing_ok=True)
+
+    def test_hover_links_the_map_scatter_and_table(self):
+        """Pointing at a lake in one panel must light it up in the others.
+
+        The map says which direction and how far, the scatter says whether the
+        extra drive is worth it, the table carries the numbers - they are one
+        instrument only if they are linked. This executes the real hover
+        handler rather than grepping for it: an earlier version of the runtime
+        stub returned [] from querySelectorAll, which would have let a hover
+        that highlighted nothing pass silently.
+        """
+        r = self._run_js("""
+          const tagged = globalThis.__made.filter(n => n.attrs["data-lake"]);
+          if (tagged.length < 3) throw new Error("nothing carries data-lake");
+          const name = tagged[0].attrs["data-lake"];
+          const mine = tagged.filter(n => n.attrs["data-lake"] === name);
+          // map circle + scatter circle + table row: all three, or the panels
+          // are not actually linked.
+          if (mine.length < 3)
+            throw new Error(`only ${mine.length} panel(s) tag ${name}`);
+          tagged[0].dispatch("mouseenter");
+          const lit = mine.filter(n => n._classes.has("is-hot")).length;
+          if (lit !== mine.length)
+            throw new Error(`hovering lit ${lit} of ${mine.length} panels`);
+          const strays = tagged.filter(n => n.attrs["data-lake"] !== name
+                                       && n._classes.has("is-hot"));
+          if (strays.length) throw new Error("hover leaked to other lakes");
+          tagged[0].dispatch("mouseleave");
+          if (globalThis.__made.some(n => n._classes.has("is-hot")))
+            throw new Error("hover never cleared");
+          console.log("linked", mine.length, "panels for", name);
+        """)
+        assert r.returncode == 0, f"linked hover broken:\n{r.stderr[:1500]}"
+        assert "linked" in r.stdout
+
     def test_render_paths_execute_without_error(self):
         import shutil
         import subprocess

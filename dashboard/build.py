@@ -179,6 +179,13 @@ table.short tbody tr.is-sel td:first-child{box-shadow:inset 3px 0 0 var(--accent
 .rk{color:var(--ink-3); font-family:"IBM Plex Mono",monospace; font-size:12px}
 .unsure{color:var(--accent); font-weight:600; margin-left:.28em; cursor:help}
 .bsrc{color:var(--ink-3); font-size:12px; font-style:italic; margin:.35rem 0 0}
+/* Linked highlight. Stroke and background only - nothing here moves a box, so
+   pointing across three panels never costs a layout pass. */
+@media (hover:hover) and (pointer:fine){
+  .mp-pick.is-hot, .sc-pick.is-hot{stroke:var(--accent); stroke-width:2.6}
+  tr.is-hot td{background:var(--surface-2)}
+  tr.is-hot td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+}
 
 /* Interaction feedback stays on paint and composited properties only - never
    width, height, top or margin - so hovering a dense table cannot cost a
@@ -802,6 +809,7 @@ function drawMap() {
       `${l.lake} — ${fmt(pick.expected_fph)} fish/hr, ${Math.round(pick.miles)} mi`
       + (l.unsure ? " (approximate location)" : "")));
     c.addEventListener("click", () => selectLake(l.lake));
+    linkHover(c, l.lake);
     svg.append(c);
     if (selLake === l.lake)
       svg.append(svgEl("circle", { cx: l.x, cy: l.y, r: 10, class: "mp-sel" }));
@@ -854,6 +862,7 @@ function drawScatter() {
     c.append(svgEl("title", {},
       `${r.lake} — ${fmt(r.expected_fph)} fish/hr, ${Math.round(r.miles)} mi`));
     c.addEventListener("click", () => selectLake(r.lake));
+    linkHover(c, r.lake);
     svg.append(c);
     if (selLake === r.lake) {
       svg.append(svgEl("circle", {
@@ -866,6 +875,28 @@ function drawScatter() {
 }
 
 let shortSort = { key: "score", dir: -1 };
+// The map answers "which direction and how far"; the scatter answers "is the
+// extra drive worth it"; the table carries the numbers. They are one instrument
+// only if pointing at a lake in any of them lights it up in the other two.
+let hotLake = null;
+
+function setHover(name) {
+  if (hotLake === name) return;
+  hotLake = name;
+  // Matched by reading the attribute rather than by selector, because lake
+  // names contain apostrophes - "Sandy's Place", "Tanner's Lake" - which would
+  // break an attribute selector built by string concatenation.
+  document.querySelectorAll("[data-lake]").forEach(n => {
+    n.classList.toggle("is-hot", name != null
+      && n.getAttribute("data-lake") === name);
+  });
+}
+
+function linkHover(node, name) {
+  node.addEventListener("mouseenter", () => setHover(name));
+  node.addEventListener("mouseleave", () => setHover(null));
+}
+
 const UNSURE_NOTE = "Approximate. This is a retired property with no page left "
   + "to check, and its town name repeats inside Texas, so the club's own "
   + "directions cannot confirm which one it is. The catch-rate ranking is "
@@ -911,7 +942,9 @@ function drawShortlist() {
     const cs = r.consistency || {};
     const tr = tb.insertRow();
     if (selLake === r.lake) tr.className = "is-sel";
+    tr.dataset.lake = r.lake;
     tr.addEventListener("click", () => selectLake(r.lake));
+    linkHover(tr, r.lake);
     const c0 = tr.insertCell();
     c0.append(el("span", "rk", "#" + r.rank + "  "), document.createTextNode(r.lake));
     [fmt(r.expected_fph), r.miles == null ? "–" : Math.round(r.miles) + " mi",
