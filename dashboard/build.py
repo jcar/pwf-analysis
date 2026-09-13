@@ -178,6 +178,7 @@ table.short tbody tr.is-sel td{background:var(--accent-soft)}
 table.short tbody tr.is-sel td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .rk{color:var(--ink-3); font-family:"IBM Plex Mono",monospace; font-size:12px}
 .unsure{color:var(--accent); font-weight:600; margin-left:.28em; cursor:help}
+.bsrc{color:var(--ink-3); font-size:12px; font-style:italic; margin:.35rem 0 0}
 
 /* Interaction feedback stays on paint and composited properties only - never
    width, height, top or margin - so hovering a dense table cannot cost a
@@ -1022,10 +1023,22 @@ function drawBrief() {
     const s2 = el("div", "bsec");
     const fc = cond.forecast;
     s2.append(el("h4", null, "Conditions that day"));
-    s2.append(el("p", "bline",
-      `${Math.round(fc.temp_max_f)}°F high · ${Math.round(fc.wind_max_mph)} mph `
-      + `· ${fc.cloud_pct}% cloud · ${fc.pressure_trend || "steady"} pressure`));
+    // Each reading is printed only if it exists. An earlier version defaulted a
+    // missing pressure trend to "steady", which invented a measurement the
+    // forecast never carried - the one thing a conditions panel must not do.
+    const parts = [];
+    if (fc.temp_max_f != null) parts.push(`${Math.round(fc.temp_max_f)}°F high`);
+    if (fc.wind_max_mph != null) parts.push(`${Math.round(fc.wind_max_mph)} mph`);
+    if (fc.cloud_pct != null) parts.push(`${Math.round(fc.cloud_pct)}% cloud`);
+    if (fc.pressure_trend) parts.push(`${fc.pressure_trend} pressure`);
+    s2.append(el("p", "bline", parts.join(" · ")));
     if (cond.note) s2.append(el("p", "bnote", cond.note));
+    if (fc.source === "nws") {
+      s2.append(el("p", "bsrc",
+        "From the US National Weather Service, because Open-Meteo's daily quota "
+        + "was spent. No pressure trend in this feed, so that line is absent "
+        + "rather than guessed."));
+    }
     s2.append(ev("Why the forecast is not in the ranking", el("div", null,
       "Measured inside each lake-month, the largest weather effect in this archive "
       + "— calm against windy — is about 10% with a confidence interval that "

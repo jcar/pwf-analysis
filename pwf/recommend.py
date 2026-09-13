@@ -114,8 +114,20 @@ def fetch_forecast(cells: list[tuple[float, float]],
     except Exception:
         if not allow_stale:
             raise
+        # Prefer the last good Open-Meteo answer, because it matches the ERA5
+        # baseline the forecast gets compared against. Fall back to the NWS for
+        # whatever the cache does not cover - a forecast from a second source
+        # beats a brief with no conditions in it.
         cached = _load_forecast_cache()
-        return {c: cached[c] for c in cells if c in cached}
+        out = {c: cached[c] for c in cells if c in cached}
+        missing = [c for c in cells if c not in out]
+        if missing:
+            from .forecast_nws import fetch_forecast_nws
+            try:
+                out.update(fetch_forecast_nws(missing))
+            except Exception:
+                pass
+        return out
     payload = r.json()
     blocks = payload if isinstance(payload, list) else [payload]
 
