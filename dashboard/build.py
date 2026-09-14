@@ -123,6 +123,38 @@ header.top > *{position:relative}
 .wx{font-size:13.5px; color:var(--ink-2); font-family:"IBM Plex Mono",monospace}
 .wx b{color:var(--ink)}
 
+/* The map leads: it gets the width, and the controls that query it sit beside
+   it rather than under the fold. */
+.maphero{display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:26px;
+  align-items:start; margin:0 0 30px}
+@media (max-width:980px){ .maphero{grid-template-columns:1fr} }
+.mapctl{border:1px solid var(--rule); background:var(--surface); padding:14px 16px}
+.mp-presets{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px}
+.mp-btn{font:600 12px "Source Sans 3",sans-serif; color:var(--ink-2);
+  background:var(--surface-2); border:1px solid var(--rule); border-radius:3px;
+  padding:5px 10px; cursor:pointer}
+.mp-btn:hover{color:var(--ink); border-color:var(--rule-strong)}
+.mp-slider{display:block; margin:10px 0}
+.mp-cap{display:block; font:500 12px "Source Sans 3",sans-serif;
+  color:var(--ink-3); margin-bottom:3px}
+.mp-cap b{color:var(--ink); font-family:"IBM Plex Mono",monospace}
+.mp-slider input{width:100%; accent-color:var(--accent)}
+.mapmeta{border:1px solid var(--rule); background:var(--surface); padding:14px 16px}
+.mm-count{margin:0 0 10px; font:500 12px "IBM Plex Mono",monospace;
+  color:var(--ink-3)}
+.mm-key{display:grid; gap:5px; margin:0 0 14px}
+.mm-keyrow{display:flex; align-items:center; gap:8px;
+  font:500 12px "Source Sans 3",sans-serif; color:var(--ink-3)}
+.mm-keyrow i{flex:0 0 auto; width:16px; height:10px; border-radius:2px}
+.swatch.grad{background:linear-gradient(90deg,var(--u1),var(--u4))}
+.swatch.size{width:10px; height:10px; border-radius:50%; background:var(--ink-3)}
+.swatch.hollow{width:10px; height:10px; border-radius:50%; background:none;
+  border:1px solid var(--ink-3)}
+.swatch.ring{border-top:1px dashed var(--rule-strong); height:0; border-radius:0}
+.swatch.dash{width:10px; height:10px; border-radius:50%; background:none;
+  border:1.5px dashed var(--accent)}
+.mm-grad h4{margin:0 0 5px; font-size:15px}
+.mm-grad p{margin:0 0 8px; font-size:13.5px; color:var(--ink-2)}
 .plan-grid{display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:26px;
   align-items:start}
 @media (max-width:980px){ .plan-grid{grid-template-columns:1fr} }
@@ -138,6 +170,17 @@ header.top > *{position:relative}
 .mp-home{fill:var(--accent)}
 .mp-lake{fill:var(--ink-3); opacity:.42}
 .mp-pick{stroke:var(--surface); stroke-width:1.2; cursor:pointer}
+.mapsvg{touch-action:none; cursor:grab}
+.mapsvg:active{cursor:grabbing}
+.mp-dot{stroke:var(--surface); stroke-width:1.1; cursor:pointer}
+/* Too little history to rank: drawn hollow rather than coloured as average. */
+.mp-nodata{stroke:var(--ink-3); stroke-width:1.1; opacity:.55}
+.mp-top{stroke:var(--ink); stroke-width:1.5}
+/* Not a round distance ring - the line where the club's rates actually change. */
+.mp-grad{fill:none; stroke:var(--accent); stroke-width:1.6; stroke-dasharray:7 4;
+  opacity:.75}
+.mp-gradlab{fill:var(--accent); font:600 10.5px "IBM Plex Mono",monospace;
+  paint-order:stroke; stroke:var(--surface); stroke-width:3px}
 /* A lake whose town could not be confirmed: same rank, softer edge, so the
    map never implies a precision the geocoding does not have. */
 .mp-unsure{stroke:var(--accent); stroke-width:1.6; stroke-dasharray:2.5 2.5}
@@ -469,16 +512,18 @@ footer p{margin:0 0 11px}
   <p class="wx" id="wx"></p>
   <p class="note" id="plan-note"></p>
 
-  <div class="plan-grid">
-    <div>
-      <div style="overflow-x:auto"><table class="short" id="short"></table></div>
-      <div class="brief" id="brief"></div>
-    </div>
-    <div class="maprail">
-      <div class="mapbox" id="mapbox"></div>
+  <div class="maphero">
+    <div class="mapbox" id="mapbox"></div>
+    <aside class="maprail">
+      <div class="mapctl" id="mapctl"></div>
+      <div class="mapmeta" id="mapmeta"></div>
       <div class="scat" id="scat"></div>
-    </div>
+    </aside>
   </div>
+
+  <p class="note" id="plan-note"></p>
+  <div style="overflow-x:auto"><table class="short" id="short"></table></div>
+  <div class="brief" id="brief"></div>
 </section>
 
 <hr class="lateral">
@@ -754,72 +799,268 @@ function rateColor(v, max) {
   return "var(" + ramp[Math.max(0, i)] + ")";
 }
 
+// ---- the map -------------------------------------------------------------
+// The primary surface. It carries the whole club rather than this week's
+// shortlist, because where the good water is turns out to be a spatial fact:
+// inside eighty miles of Dallas the lakes are small, hard-fished and average
+// 3.7 fish an hour; beyond it they are bigger, quieter and average 5.3.
+let mapView = null;                    // {x,y,w,h} viewBox, null = fit all
+let mapFilters = { miles: 200, trips: 0, price: 0 };
+let mapDrag = null;
+
+function mapExtent() {
+  const m = P.map;
+  return mapView || { x: 0, y: 0, w: m.width, h: m.height };
+}
+
+function lakePasses(l) {
+  if (mapFilters.miles && l.miles != null && l.miles > mapFilters.miles) return false;
+  if (mapFilters.trips && (l.trips || 0) < mapFilters.trips) return false;
+  if (mapFilters.price && l.rate != null && l.rate > mapFilters.price) return false;
+  return true;
+}
+
+function zoomMap(factor, cx, cy) {
+  const m = P.map, v = mapExtent();
+  const w = Math.min(m.width, Math.max(m.width / 12, v.w * factor));
+  const h = w * (m.height / m.width);
+  const fx = cx == null ? 0.5 : (cx - v.x) / v.w;
+  const fy = cy == null ? 0.5 : (cy - v.y) / v.h;
+  mapView = {
+    x: Math.min(Math.max(v.x + (v.w - w) * fx, -m.width * 0.2),
+                m.width * 1.2 - w),
+    y: Math.min(Math.max(v.y + (v.h - h) * fy, -m.height * 0.2),
+                m.height * 1.2 - h),
+    w, h,
+  };
+  drawMap();
+}
+
+function mapPreset(name) {
+  const m = P.map;
+  if (name === "all") { mapView = null; drawMap(); return; }
+  const pick = m.lakes.filter(l => name === "dfw" ? (l.miles ?? 999) <= 70
+    : name === "east" ? l.x > m.width * 0.55
+    : l.y < m.height * 0.34);
+  if (!pick.length) { mapView = null; drawMap(); return; }
+  const xs = pick.map(l => l.x), ys = pick.map(l => l.y);
+  const pad = 60;
+  const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad;
+  const y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
+  const w = Math.max(x1 - x0, (y1 - y0) * (m.width / m.height));
+  mapView = { x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - w * (m.height / m.width) / 2,
+              w, h: w * (m.height / m.width) };
+  drawMap();
+}
+
 function drawMap() {
   const m = P.map, host = $("#mapbox");
   if (!m || !host) return;
-  host.textContent = "";
+  host.innerHTML = "";
   const day = dayData();
-  const picks = new Map((day.shortlist || []).map((r, i) => [r.lake, { ...r, rank: i + 1 }]));
-  const max = Math.max(...(day.shortlist || []).map(r => r.expected_fph || 0), 1);
+  const rates = day.rates || {};
+  const ranked = day.ranked || {};
+  const shown = m.lakes.filter(lakePasses);
+  const vals = shown.map(l => rates[l.lake]).filter(v => v != null);
+  const max = Math.max(...vals, 1);
+  const v = mapExtent();
 
   const svg = svgEl("svg", {
-    viewBox: `0 0 ${m.width} ${m.height}`, role: "img",
-    "aria-label": "Club lakes and drive distance from Dallas",
+    viewBox: `${v.x} ${v.y} ${v.w} ${v.h}`, class: "mapsvg", role: "img",
+    "aria-label": "Every club lake, coloured by expected catch rate, with "
+      + "drive-distance rings from Dallas",
   });
+
   m.states.forEach(st => svg.append(svgEl("path", { d: st.d, class: "mp-state" })));
+
+  // Drive rings. The 80-mile ring is drawn differently because it is where the
+  // club's catch rates actually change, not just a round number.
   m.rings.forEach(r => {
     svg.append(svgEl("path", { d: r.d, class: "mp-ring" }));
-    svg.append(svgEl("text", {
-      x: r.label_x + 4, y: r.label_y + 11, class: "mp-ringlab",
-    }, `${r.miles} mi`));
+    svg.append(svgEl("text", { x: r.label_x + 4, y: r.label_y + 12,
+      class: "mp-ringlab" }, `${r.miles} mi`));
   });
+  if (m.gradient_ring) {
+    svg.append(svgEl("path", { d: m.gradient_ring.d, class: "mp-grad" }));
+    svg.append(svgEl("text", {
+      x: m.gradient_ring.label_x + 4, y: m.gradient_ring.label_y - 5,
+      class: "mp-gradlab" }, `${m.gradient_ring.miles} mi — rates rise past here`));
+  }
+
   m.cities.forEach(c => {
     if (c.home) return;
     svg.append(svgEl("circle", { cx: c.x, cy: c.y, r: 2, class: "mp-citydot" }));
     svg.append(svgEl("text", { x: c.x + 5, y: c.y + 3.5, class: "mp-city" }, c.name));
   });
-  // every lake, so the shortlist is seen in context
-  m.lakes.forEach(l => {
-    if (picks.has(l.lake)) return;
-    // Node.append() returns undefined, so the title has to be attached to the
-    // circle before the circle goes into the document.
-    const dot = svgEl("circle", { cx: l.x, cy: l.y, r: 2.6, class: "mp-lake" });
-    dot.append(svgEl("title", {}, l.lake));
-    svg.append(dot);
-  });
-  const home = m.home;
-  svg.append(svgEl("circle", { cx: home.x, cy: home.y, r: 4.5, class: "mp-home" }));
-  svg.append(svgEl("text", { x: home.x + 7, y: home.y + 4, class: "mp-city" }, "Dallas"));
 
-  m.lakes.forEach(l => {
-    const pick = picks.get(l.lake);
-    if (!pick) return;
-    if (selLake === l.lake) {
-      svg.append(svgEl("line", {
-        x1: home.x, y1: home.y, x2: l.x, y2: l.y, class: "mp-line",
-      }));
-    }
-    const c = svgEl("circle", {
-      cx: l.x, cy: l.y, r: 6.5, class: "mp-pick",
-      fill: rateColor(pick.expected_fph, max),
+  // Lakes. Radius carries how much is known about a lake, fill carries how it
+  // fishes; a lake with too little history to rank is drawn hollow rather than
+  // coloured as if it were average.
+  const rFor = t => 3 + Math.min(4.5, Math.sqrt(Math.max(t || 0, 1)) / 3.6);
+  shown.forEach(l => {
+    const fph = rates[l.lake];
+    const rank = ranked[l.lake];
+    const dot = svgEl("circle", {
+      cx: l.x, cy: l.y, r: rFor(l.trips),
+      class: "mp-dot" + (fph == null ? " mp-nodata" : "") + (rank ? " mp-top" : "")
+        + (l.unsure ? " mp-unsure" : ""),
+      fill: fph == null ? "none" : rateColor(fph, max),
       "data-lake": l.lake,
     });
-    if (l.unsure) c.classList.add("mp-unsure");
-    c.append(svgEl("title", {},
-      `${l.lake} — ${fmt(pick.expected_fph)} fish/hr, ${Math.round(pick.miles)} mi`
-      + (l.unsure ? " (approximate location)" : "")));
-    c.addEventListener("click", () => selectLake(l.lake));
-    linkHover(c, l.lake);
-    svg.append(c);
+    dot.append(svgEl("title", {}, lakeTip(l, fph, rank)));
+    dot.addEventListener("click", () => selectLake(l.lake));
+    linkHover(dot, l.lake);
+    svg.append(dot);
     if (selLake === l.lake)
-      svg.append(svgEl("circle", { cx: l.x, cy: l.y, r: 10, class: "mp-sel" }));
-    svg.append(svgEl("text", { x: l.x + 9, y: l.y + 3.5, class: "mp-lab" },
-      String(pick.rank)));
+      svg.append(svgEl("circle", { cx: l.x, cy: l.y, r: rFor(l.trips) + 4.5,
+        class: "mp-sel" }));
+    if (rank && rank <= 5)
+      svg.append(svgEl("text", { x: l.x + rFor(l.trips) + 3, y: l.y + 3.5,
+        class: "mp-lab" }, l.lake));
   });
-  svg.append(svgEl("text", { x: 8, y: m.height - 8, class: "mp-leg" },
-    "rings = drive distance · numbers = rank · deeper blue = better"
-    + (m.lakes.some(l => l.unsure) ? " · dashed = location unconfirmed" : "")));
+
+  svg.append(svgEl("circle", { cx: m.home.x, cy: m.home.y, r: 4.5, class: "mp-home" }));
+  svg.append(svgEl("text", { x: m.home.x + 7, y: m.home.y + 4, class: "mp-city" },
+    "Dallas"));
+
+  svg.addEventListener("wheel", ev => {
+    ev.preventDefault();
+    const pt = svgPoint(svg, ev);
+    zoomMap(ev.deltaY > 0 ? 1.18 : 0.85, pt.x, pt.y);
+  });
+  svg.addEventListener("pointerdown", ev => {
+    mapDrag = { ...svgPoint(svg, ev), view: mapExtent() };
+    svg.setPointerCapture?.(ev.pointerId);
+  });
+  svg.addEventListener("pointermove", ev => {
+    if (!mapDrag) return;
+    const pt = svgPoint(svg, ev);
+    mapView = { ...mapDrag.view,
+      x: mapDrag.view.x - (pt.x - mapDrag.x),
+      y: mapDrag.view.y - (pt.y - mapDrag.y) };
+    svg.setAttribute("viewBox",
+      `${mapView.x} ${mapView.y} ${mapView.w} ${mapView.h}`);
+  });
+  ["pointerup", "pointercancel", "pointerleave"].forEach(e =>
+    svg.addEventListener(e, () => { mapDrag = null; }));
+
   host.append(svg);
+  drawMapMeta(shown.length, m.lakes.length);
+}
+
+function drawMapControls() {
+  const host = $("#mapctl");
+  if (!host) return;
+  host.innerHTML = "";
+  const presets = el("div", "mp-presets");
+  [["all", "Whole club"], ["dfw", "Near DFW"], ["east", "East Texas"],
+   ["north", "Oklahoma"]].forEach(([k, label]) => {
+    const b = el("button", "mp-btn", label);
+    b.type = "button";
+    b.addEventListener("click", () => mapPreset(k));
+    presets.append(b);
+  });
+  const zi = el("button", "mp-btn", "+"); zi.type = "button";
+  zi.setAttribute("aria-label", "Zoom in");
+  zi.addEventListener("click", () => zoomMap(0.72));
+  const zo = el("button", "mp-btn", "\u2212"); zo.type = "button";
+  zo.setAttribute("aria-label", "Zoom out");
+  zo.addEventListener("click", () => zoomMap(1.38));
+  presets.append(zi, zo);
+  host.append(presets);
+
+  // Each control is the query, not a view option: changing one re-asks the
+  // map which lakes are worth considering.
+  [["miles", "Drive at most", 40, 260, 10, mapFilters.miles, v => `${v} mi`],
+   ["trips", "At least", 0, 120, 5, mapFilters.trips, v => `${v} trips`],
+   ["price", "Up to", 0, 320, 10, mapFilters.price,
+    v => (v ? `$${v}/day` : "any price")],
+  ].forEach(([key, label, lo, hi, step, val, fmtv]) => {
+    const row = el("label", "mp-slider");
+    const cap = el("span", "mp-cap", label + " ");
+    const out = el("b", null, fmtv(val));
+    cap.append(out);
+    const input = document.createElement("input");
+    input.type = "range";
+    input.id = "mapf-" + key;
+    input.min = String(lo); input.max = String(hi); input.step = String(step);
+    input.value = String(val);
+    input.addEventListener("input", () => {
+      mapFilters[key] = Number(input.value);
+      out.textContent = fmtv(mapFilters[key]);
+      drawMap();
+    });
+    row.append(cap, input);
+    host.append(row);
+  });
+}
+
+function svgPoint(svg, ev) {
+  const box = svg.getBoundingClientRect ? svg.getBoundingClientRect() : null;
+  const v = mapExtent();
+  if (!box || !box.width) return { x: v.x + v.w / 2, y: v.y + v.h / 2 };
+  return {
+    x: v.x + ((ev.clientX - box.left) / box.width) * v.w,
+    y: v.y + ((ev.clientY - box.top) / box.height) * v.h,
+  };
+}
+
+function lakeTip(l, fph, rank) {
+  const bits = [l.lake];
+  if (rank) bits.push(`#${rank} this week`);
+  bits.push(fph == null ? "too few trips to rank" : `${fmt(fph)} fish/hr`);
+  if (l.miles != null) bits.push(`${Math.round(l.miles)} mi`);
+  if (l.acres) bits.push(`${l.acres} acres`);
+  if (l.trips) bits.push(`${l.trips} trips`);
+  if (l.rate) bits.push(`$${Math.round(l.rate)}/day`);
+  return bits.join(" · ");
+}
+
+function drawMapMeta(shownN, totalN) {
+  const host = $("#mapmeta");
+  if (!host) return;
+  host.innerHTML = "";
+  host.append(el("p", "mm-count", `Showing ${shownN} of ${totalN} lakes`));
+
+  // The map now carries four encodings at once, so it has to say so.
+  const key = el("div", "mm-key");
+  [["swatch grad", "colour = expected fish/hr"],
+   ["swatch size", "size = how many trips back it"],
+   ["swatch hollow", "hollow = too few trips to rank"],
+   ["swatch ring", "rings = drive distance from Dallas"],
+   ["swatch dash", "dashed outline = location unconfirmed"],
+  ].forEach(([cls, label]) => {
+    const row = el("div", "mm-keyrow");
+    row.append(el("i", cls), el("span", null, label));
+    key.append(row);
+  });
+  host.append(key);
+  const g = P.gradient || {};
+  if (g.near && g.far) {
+    const box = el("div", "mm-grad");
+    box.append(el("h4", null, `The ${g.split_miles} mile line`));
+    box.append(el("p", null,
+      `Inside it, ${g.near.lakes} lakes average ${fmt(g.near.fph)} fish/hr. `
+      + `Beyond it, ${g.far.lakes} lakes average ${fmt(g.far.fph)}.`));
+    box.append(ev("Why that gap is not all driving", el("div", null,
+      `The far lakes are bigger — a median ${g.far.median_acres} acres against `
+      + `${g.near.median_acres} — and the near ones absorb the club's pressure, `
+      + `a median ${g.near.median_trips} trips each against ${g.far.median_trips}. `
+      + `Holding acreage constant leaves about `
+      + `${g.held_for_size ? fmt(g.held_for_size.per_100_miles) : "0.5"} fish/hr `
+      + `per hundred miles, roughly a third of the raw gap. `
+      + `Drive correlates with trips at r=${g.corr.miles_trips}, and trips with `
+      + `rate at r=${g.corr.trips_rate}. `
+      + (g.scan && g.scan.length
+         ? `The split is drawn at ${g.split_miles} miles because that is where the `
+           + `gap is widest, which is exactly the sort of choice that flatters a `
+           + `finding — so: `
+           + g.scan.map(s => `${s.cut}mi ${s.gap > 0 ? "+" : ""}${s.gap}`).join(", ")
+           + `. Every cut-point gives a positive gap, so the pattern does not `
+           + `depend on where the line is drawn.`
+         : ""))));
+    host.append(box);
+  }
 }
 
 function drawScatter() {
@@ -1266,6 +1507,7 @@ function drawPlanner() {
   if (!P.days) return;
   const day = dayData();
   drawDaybar();
+  drawMapControls();
   const note = $("#plan-note");
   if (note) note.innerHTML =
     `Ranked on what each lake has actually produced in <b>${day.month_name}</b>, `

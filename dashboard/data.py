@@ -348,16 +348,39 @@ def _planner(conn, trips, lures) -> dict:
             "briefs": briefs,
         }
 
-    # The map ships once; only the shortlist highlighting changes per day.
-    ranked = {r["lake"]: i + 1 for i, r in
-              enumerate(days[sat.isoformat()]["shortlist"])}
-    rate = {r["lake"]: r["expected_fph"] for r in
-            days[sat.isoformat()]["shortlist"]}
-    miles = {r["lake"]: r["miles"] for r in days[sat.isoformat()]["shortlist"]}
+    # The map is the primary surface, so it carries the whole club rather than
+    # this week's twelve: every placed lake, with the attributes the on-map
+    # filters need. Geometry ships once; only the per-day rates change.
+    full = recommend(conn, when=sat, max_miles=None, limit=1000,
+                     with_forecast=False).get("lakes", [])
+    attrs = {r["lake"]: r for r in full}
+    for day in (sat, sun):
+        key = day.isoformat()
+        rows = recommend(conn, when=day, max_miles=None, limit=1000,
+                         with_forecast=False).get("lakes", [])
+        days[key]["rates"] = {r["lake"]: r["expected_fph"] for r in rows}
+        days[key]["ranked"] = {r["lake"]: i + 1
+                               for i, r in enumerate(days[key]["shortlist"])}
+
+    from pwf.geo_shapes import miles_between
+    from pwf.geo_verify import HOME
+
+    ranked = days[sat.isoformat()]["ranked"]
     for lk in all_lakes:
+        a = attrs.get(lk["name"]) or {}
         lk["rank"] = ranked.get(lk["name"])
-        lk["expected_fph"] = rate.get(lk["name"])
-        lk["miles"] = miles.get(lk["name"])
+        lk["expected_fph"] = a.get("expected_fph")
+        # Every placed lake gets a drive, not just the ranked ones. Taking it
+        # only from the ranking left the 34 too-sparse lakes with no distance
+        # at all, so they slipped through the map's drive filter and cluttered
+        # a "within sixty miles" view with lakes two hundred miles away.
+        lk["miles"] = a.get("miles")
+        if lk["miles"] is None and lk.get("lat") is not None:
+            lk["miles"] = round(
+                miles_between(HOME[0], HOME[1], lk["lat"], lk["lon"]), 1)
+        lk["trips"] = a.get("n_total")
+        lk["acres"] = a.get("acres")
+        lk["day_rate"] = a.get("day_rate")
 
     # A lake the club's own directions cannot confirm still has sound catch
     # data - it is only the drive and the weather join that rest on a guessed
@@ -368,8 +391,11 @@ def _planner(conn, trips, lures) -> dict:
             if row["lake"] in unsure:
                 row["geo_uncertain"] = True
 
+    from pwf.geography import drive_gradient
+
     return {"days": days, "default_day": sat.isoformat(),
             "map": build_map(all_lakes),
+            "gradient": drive_gradient(conn),
             "report_url": "https://www.privatewaterfishing.com/forums/view_report/"}
 
 

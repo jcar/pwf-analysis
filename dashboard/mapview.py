@@ -15,7 +15,9 @@ import math
 
 from pwf.geo_shapes import CITIES, RINGS_MILES, load, make_projection
 
-WIDTH, HEIGHT = 520, 620
+# The map is the page's primary surface, not a side panel, so it is drawn at
+# hero size. The club's footprint is taller than it is wide, so is this.
+WIDTH, HEIGHT = 660, 760
 HOME = next(c for c in CITIES if c.get("home"))
 
 
@@ -85,6 +87,13 @@ def build_map(lakes: list[dict]) -> dict:
         rings.append({"miles": m, "d": _ring_path(project, m),
                       "label_x": hx, "label_y": round(ly, 1)})
 
+    # The eighty-mile ring is not one of the round distance rings: it is where
+    # the club's catch rates change, so it is drawn as its own mark.
+    from pwf.geography import SPLIT_MILES
+    _, gy = project(HOME["lon"], HOME["lat"] + SPLIT_MILES / 69.0)
+    gradient_ring = {"miles": SPLIT_MILES, "d": _ring_path(project, SPLIT_MILES),
+                     "label_x": hx, "label_y": round(gy, 1)}
+
     marks = []
     for lk in lakes:
         if lk.get("lat") is None or lk.get("lon") is None:
@@ -95,10 +104,14 @@ def build_map(lakes: list[dict]) -> dict:
             "rank": lk.get("rank"),
             "fph": lk.get("expected_fph"),
             "miles": lk.get("miles"),
+            "trips": lk.get("trips"),
+            "acres": lk.get("acres"),
+            "rate": lk.get("day_rate"),
             "unsure": bool(lk.get("geo_uncertain")) or None,
         })
 
     return {"width": WIDTH, "height": HEIGHT, "states": states,
             "cities": cities, "rings": rings,
+            "gradient_ring": gradient_ring,
             "home": {"x": hx, "y": hy, "name": HOME["name"]},
             "lakes": marks, "bounds": bounds}

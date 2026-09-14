@@ -299,6 +299,56 @@ class TestPageActuallyRuns:
         assert r.returncode == 0, f"linked hover broken:\n{r.stderr[:1500]}"
         assert "linked" in r.stdout
 
+    def test_map_carries_the_whole_club_with_a_drive_for_each(self):
+        """The map is the primary surface, so it shows every placed lake - not
+        just this week's twelve - and each needs a drive distance.
+
+        Taking `miles` from the ranking gave it only to the 132 lakes with
+        enough history; the other 34 had none, so they passed every drive
+        filter and a "within sixty miles" view showed lakes 200 miles out.
+        """
+        d = _payload(_page())["planner"]
+        lakes = d["map"]["lakes"]
+        assert len(lakes) > 120, "map is not carrying the whole club"
+        missing = [l["lake"] for l in lakes if l.get("miles") is None]
+        assert not missing, f"no drive distance for {missing[:5]}"
+        unranked = [l for l in lakes if l.get("fph") is None]
+        assert unranked, "some lakes should be too sparse to rank"
+
+    def test_map_filters_and_zoom_actually_change_the_map(self):
+        """The controls are the query, not a view preference, so this drives
+        them and counts what gets drawn."""
+        r = self._run_js("""
+          const census = () => { globalThis.__made.length = 0; drawMap();
+            return globalThis.__made.filter(n => n.tagName === "circle"
+              && (n.attrs["class"] || "").includes("mp-dot")).length; };
+          mapFilters.miles = 260; const wide = census();
+          mapFilters.miles = 60;  const tight = census();
+          if (!(tight < wide)) throw new Error(
+            `drive filter did nothing: ${tight} vs ${wide}`);
+          mapFilters.miles = 260; mapFilters.trips = 100;
+          if (!(census() < wide)) throw new Error("trips filter did nothing");
+          mapFilters.trips = 0;
+          const before = P.map.width;
+          zoomMap(0.5);
+          if (!(mapView && mapView.w < before)) throw new Error("zoom did nothing");
+          mapPreset("all");
+          if (mapView !== null) throw new Error("preset did not reset the view");
+          console.log("controls ok", wide, tight);
+        """)
+        assert r.returncode == 0, f"map controls broken:\n{r.stderr[:1500]}"
+        assert "controls ok" in r.stdout
+
+    def test_the_gradient_finding_ships_with_its_caveat(self):
+        d = _payload(_page())["planner"]
+        g = d.get("gradient") or {}
+        assert g.get("raw_gap", 0) > 0
+        assert g["far"]["fph"] > g["near"]["fph"]
+        # The page must not sell the raw gap as a drive effect.
+        assert "cannot separate" in g["caveat"]
+        assert g["held_for_size"]["per_100_miles"] < g["raw_gap"]
+        assert d["map"].get("gradient_ring"), "the line is not drawn on the map"
+
     def test_render_paths_execute_without_error(self):
         import shutil
         import subprocess
