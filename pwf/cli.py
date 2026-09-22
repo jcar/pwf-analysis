@@ -1012,7 +1012,7 @@ def sql(query: str):
 
 
 @app.command()
-def dashboard(out: str = typer.Option("dashboard/index.html")):
+def dashboard(out: str = typer.Option("docs/index.html")):
     """Build the aggregate dashboard page."""
     from dashboard.build import build_dashboard
     path = build_dashboard(_db(), out)

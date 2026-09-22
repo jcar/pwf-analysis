@@ -14,8 +14,10 @@ PAGE = None
 def _page():
     global PAGE
     from pathlib import Path
-    p = Path("dashboard/index.html")
-    if not p.exists():
+    # docs/ is what GitHub Pages serves; dashboard/ is the old output path.
+    p = next((q for q in (Path("docs/index.html"), Path("dashboard/index.html"))
+              if q.exists()), None)
+    if p is None:
         pytest.skip("dashboard not built - run `pwf dashboard`")
     if PAGE is None:
         PAGE = p.read_text(encoding="utf-8")
@@ -140,13 +142,32 @@ class TestPlanner:
             assert 0 <= mark["x"] <= m["width"]
             assert 0 <= mark["y"] <= m["height"]
 
-    def test_no_tile_or_external_map_dependency(self):
-        """A tile map would fail silently under the artifact's content policy,
-        so the map must be self-contained geometry."""
+    def test_the_map_uses_real_tiles_from_keyless_providers(self):
+        """This test used to assert the opposite, and the reversal is the point.
+
+        The map drew its own geometry because the artifact host blocks tile
+        servers outright. Served from GitHub Pages there is no such policy, so
+        it is a real slippy map - and for ten-to-fifty-acre private ponds the
+        satellite layer is the one that tells you something before you book.
+
+        All three providers must stay keyless: an API key in a public repo is a
+        credential leak, and a billing-backed key is one someone else can spend.
+        """
         html = _page()
-        for host in ("tile.openstreetmap", "maps.googleapis", "api.mapbox",
-                     "leaflet", "unpkg.com"):
-            assert host not in html.lower(), f"{host} would be blocked"
+        for host in ("server.arcgisonline.com", "tile.openstreetmap.org",
+                     "basemaps.cartocdn.com"):
+            assert host in html, f"{host} basemap missing"
+        assert "cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4" in html, \
+            "Leaflet must be pinned, not floating"
+        for keyed in ("maps.googleapis.com", "api.mapbox.com",
+                      "api.maptiler.com", "access_token=", "&key=", "apikey"):
+            assert keyed not in html, f"{keyed} implies an API key in a public repo"
+
+    def test_attribution_is_present_for_every_basemap(self):
+        """Required by OSM's and Esri's terms, and it is other people's work."""
+        html = _page()
+        for credit in ("OpenStreetMap contributors", "Esri", "CARTO"):
+            assert credit in html, f"missing attribution: {credit}"
 
     def test_unconfirmed_locations_are_marked_not_hidden(self):
         """A lake whose town the club's directions cannot confirm still ranks -
@@ -280,10 +301,12 @@ class TestPageActuallyRuns:
           if (tagged.length < 3) throw new Error("nothing carries data-lake");
           const name = tagged[0].attrs["data-lake"];
           const mine = tagged.filter(n => n.attrs["data-lake"] === name);
-          // map circle + scatter circle + table row: all three, or the panels
-          // are not actually linked.
-          if (mine.length < 3)
-            throw new Error(`only ${mine.length} panel(s) tag ${name}`);
+          // The scatter circle and the table row carry data-lake. The map's
+          // markers are Leaflet objects, not DOM nodes, so they are checked
+          // separately below - that difference is exactly what made hovering
+          // the table leave the map untouched.
+          if (mine.length < 2)
+            throw new Error(`only ${mine.length} DOM panel(s) tag ${name}`);
           tagged[0].dispatch("mouseenter");
           const lit = mine.filter(n => n._classes.has("is-hot")).length;
           if (lit !== mine.length)
@@ -291,10 +314,16 @@ class TestPageActuallyRuns:
           const strays = tagged.filter(n => n.attrs["data-lake"] !== name
                                        && n._classes.has("is-hot"));
           if (strays.length) throw new Error("hover leaked to other lakes");
+          const mk = markerFor[name];
+          if (!mk) throw new Error("no map marker for " + name);
+          if (mk.options.color !== "#c9a544")
+            throw new Error("hover did not reach the map marker");
           tagged[0].dispatch("mouseleave");
           if (globalThis.__made.some(n => n._classes.has("is-hot")))
             throw new Error("hover never cleared");
-          console.log("linked", mine.length, "panels for", name);
+          if (mk.options.color === "#c9a544" && selLake !== name)
+            throw new Error("map marker stayed highlighted after leave");
+          console.log("linked", mine.length + 1, "panels for", name);
         """)
         assert r.returncode == 0, f"linked hover broken:\n{r.stderr[:1500]}"
         assert "linked" in r.stdout
@@ -310,31 +339,40 @@ class TestPageActuallyRuns:
         d = _payload(_page())["planner"]
         lakes = d["map"]["lakes"]
         assert len(lakes) > 120, "map is not carrying the whole club"
+        # Leaflet plots real coordinates, so every mark needs them and they
+        # must land inside Texas/Oklahoma.
+        for l in lakes:
+            assert 25.8 <= l["lat"] <= 37.1, f'{l["lake"]} at {l["lat"]}'
+            assert -103.1 <= l["lon"] <= -93.5, f'{l["lake"]} at {l["lon"]}'
         missing = [l["lake"] for l in lakes if l.get("miles") is None]
         assert not missing, f"no drive distance for {missing[:5]}"
         unranked = [l for l in lakes if l.get("fph") is None]
         assert unranked, "some lakes should be too sparse to rank"
 
-    def test_map_filters_and_zoom_actually_change_the_map(self):
+    def test_map_filters_actually_change_what_is_plotted(self):
         """The controls are the query, not a view preference, so this drives
-        them and counts what gets drawn."""
+        them against a Leaflet stub and counts the markers that survive."""
         r = self._run_js("""
-          const census = () => { globalThis.__made.length = 0; drawMap();
-            return globalThis.__made.filter(n => n.tagName === "circle"
-              && (n.attrs["class"] || "").includes("mp-dot")).length; };
-          mapFilters.miles = 260; const wide = census();
-          mapFilters.miles = 60;  const tight = census();
+          const L_ = globalThis.__leaflet;
+          const count = () => { drawMap();
+            return L_.markers.filter(m => m._group === lakeLayer).length; };
+          mapFilters.miles = 260; const wide = count();
+          mapFilters.miles = 60;  const tight = count();
           if (!(tight < wide)) throw new Error(
             `drive filter did nothing: ${tight} vs ${wide}`);
           mapFilters.miles = 260; mapFilters.trips = 100;
-          if (!(census() < wide)) throw new Error("trips filter did nothing");
-          mapFilters.trips = 0;
-          const before = P.map.width;
-          zoomMap(0.5);
-          if (!(mapView && mapView.w < before)) throw new Error("zoom did nothing");
-          mapPreset("all");
-          if (mapView !== null) throw new Error("preset did not reset the view");
-          console.log("controls ok", wide, tight);
+          if (!(count() < wide)) throw new Error("trips filter did nothing");
+          mapFilters.trips = 0; mapFilters.price = 90;
+          if (!(count() < wide)) throw new Error("price filter did nothing");
+          mapFilters.price = 0; count();
+          // Unranked lakes are hollow, never coloured as if average.
+          const hollow = L_.markers.filter(m => m._group === lakeLayer
+            && m.options.fillOpacity === 0).length;
+          if (!hollow) throw new Error("no lake drawn as too-sparse-to-rank");
+          if (L_.circles.length < 5) throw new Error(
+            "drive rings and the 80-mile line are not both drawn");
+          mapPreset("dfw"); mapPreset("all");
+          console.log("controls ok", wide, tight, hollow);
         """)
         assert r.returncode == 0, f"map controls broken:\n{r.stderr[:1500]}"
         assert "controls ok" in r.stdout

@@ -5,9 +5,11 @@ data/raw/
 data/pwf.sqlite*
 .pytest_cache/
 crawl.log
-dashboard/index.html
 
 # data/lake_coords.csv is deliberately TRACKED: it holds hand-settled
 # coordinates (confirmed=yes) that no automatic pass can reproduce, and
 # it carries no member content - only lake names, towns and lat/lon.
 weather.log
+
+# docs/index.html is the published page: GitHub Pages serves it straight
+# from this branch, so unlike a normal build artifact it is tracked.

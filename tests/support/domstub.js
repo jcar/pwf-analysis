@@ -76,3 +76,44 @@ globalThis.document.querySelector = (sel) => {
   if (sel === "#brief") globalThis.__drew.brief = true;
   return _qs(sel);
 };
+
+// ---- Leaflet, enough of it to exercise the map's real code path -----------
+// Without this, initMap() returns early on `typeof L === "undefined"`, drawMap()
+// does nothing, and the map tests pass while testing nothing at all - the same
+// trap as the planner that was silently parsed as CSS.
+globalThis.__leaflet = { markers: [], circles: [], tileLayers: [], fits: 0, pans: 0 };
+class LayerGroup {
+  constructor(){ this._layers = []; }
+  addTo(){ return this; }
+  clearLayers(){ this._layers.length = 0;
+    globalThis.__leaflet.markers = globalThis.__leaflet.markers
+      .filter(m => m._group !== this); return this; }
+  addLayer(l){ this._layers.push(l); return this; }
+}
+class Marker {
+  constructor(latlng, opts){ this._latlng = latlng; this.options = opts || {};
+    this._on = {}; }
+  addTo(g){ if (g && g._layers) { g._layers.push(this); this._group = g; }
+    globalThis.__leaflet.markers.push(this); return this; }
+  bindTooltip(t){ this._tip = t; return this; }
+  on(ev, fn){ (this._on[ev] ||= []).push(fn); return this; }
+  fire(ev){ (this._on[ev] || []).forEach(f => f()); }
+  setStyle(o){ Object.assign(this.options, o); return this; }
+  bringToFront(){ return this; }
+  getLatLng(){ return this._latlng; }
+}
+globalThis.L = {
+  map(){ return {
+    fitBounds(){ globalThis.__leaflet.fits++; },
+    panTo(){ globalThis.__leaflet.pans++; },
+    setView(){},
+  }; },
+  tileLayer(url, opts){ globalThis.__leaflet.tileLayers.push({ url, opts });
+    return { addTo(){ return this; } }; },
+  control: { layers(){ return { addTo(){ return this; } }; } },
+  layerGroup(){ const g = new LayerGroup(); return g; },
+  circle(latlng, opts){ const c = new Marker(latlng, opts);
+    globalThis.__leaflet.circles.push(c); return c; },
+  circleMarker(latlng, opts){ return new Marker(latlng, opts); },
+  latLngBounds(pts){ return { pts }; },
+};

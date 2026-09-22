@@ -39,6 +39,8 @@ def build_dashboard(conn: sqlite3.Connection, out: str) -> Path:
 PAGE = r"""<title>Private Water Pattern Book</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Sans+3:wght@400;500;600&display=swap">
 <style>
 :root{
@@ -160,8 +162,19 @@ header.top > *{position:relative}
 @media (max-width:980px){ .plan-grid{grid-template-columns:1fr} }
 
 .maprail{display:grid; gap:18px}
-.mapbox{border:1px solid var(--rule); background:var(--surface); padding:10px}
-.mapbox svg{display:block; width:100%; height:auto}
+.mapbox{border:1px solid var(--rule); background:var(--surface);
+  height:min(78vh,760px); min-height:420px; z-index:0}
+.leaflet-container{background:var(--surface-2); font-family:"Source Sans 3",sans-serif}
+.leaflet-container a{color:var(--accent)}
+/* Drive rings and the eighty-mile line, which is not a round distance but
+   where the club's catch rates actually change. */
+.lr-ring{stroke:#f4f2e9; opacity:.55}
+.lr-grad{stroke:#c9a544; opacity:.95}
+.lr-home{stroke:#c9a544; fill:#c9a544; fill-opacity:.9}
+.leaflet-tooltip{background:var(--surface); color:var(--ink);
+  border:1px solid var(--rule-strong); box-shadow:none;
+  font:500 12.5px "Source Sans 3",sans-serif}
+.leaflet-tooltip-top:before{border-top-color:var(--rule-strong)}
 .mp-state{fill:var(--surface-2); stroke:var(--rule-strong); stroke-width:1}
 .mp-ring{fill:none; stroke:var(--rule-strong); stroke-width:1; stroke-dasharray:3 5}
 .mp-ringlab{fill:var(--ink-3); font:500 10px "IBM Plex Mono",monospace}
@@ -170,8 +183,6 @@ header.top > *{position:relative}
 .mp-home{fill:var(--accent)}
 .mp-lake{fill:var(--ink-3); opacity:.42}
 .mp-pick{stroke:var(--surface); stroke-width:1.2; cursor:pointer}
-.mapsvg{touch-action:none; cursor:grab}
-.mapsvg:active{cursor:grabbing}
 .mp-dot{stroke:var(--surface); stroke-width:1.1; cursor:pointer}
 /* Too little history to rank: drawn hollow rather than coloured as average. */
 .mp-nodata{stroke:var(--ink-3); stroke-width:1.1; opacity:.55}
@@ -800,18 +811,27 @@ function rateColor(v, max) {
 }
 
 // ---- the map -------------------------------------------------------------
-// The primary surface. It carries the whole club rather than this week's
-// shortlist, because where the good water is turns out to be a spatial fact:
-// inside eighty miles of Dallas the lakes are small, hard-fished and average
-// 3.7 fish an hour; beyond it they are bigger, quieter and average 5.3.
-let mapView = null;                    // {x,y,w,h} viewBox, null = fit all
+// A real slippy map on OpenStreetMap, Esri imagery and Carto tiles. The earlier
+// version drew its own geometry because the artifact host blocks tile servers
+// outright; served from GitHub Pages there is no such limit, and for ten-to-
+// fifty-acre private ponds the satellite layer is the one that actually tells
+// you something - shape, timber, the grass line, where the creek comes in.
+//
+// It leads the page because where the good water is turns out to be a spatial
+// fact: inside eighty miles of Dallas the lakes are small, hard-fished and
+// average 3.7 fish an hour; beyond it they are bigger, quieter and average 4.9.
+let lmap = null, lakeLayer = null, ringLayer = null, markerFor = {};
 let mapFilters = { miles: 200, trips: 0, price: 0 };
-let mapDrag = null;
 
-function mapExtent() {
-  const m = P.map;
-  return mapView || { x: 0, y: 0, w: m.width, h: m.height };
-}
+const BASEMAPS = [
+  ["Satellite", "https://server.arcgisonline.com/ArcGIS/rest/services/"
+    + "World_Imagery/MapServer/tile/{z}/{y}/{x}",
+   "Imagery &copy; Esri, Maxar, Earthstar Geographics", 19],
+  ["Street", "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+   "&copy; OpenStreetMap contributors", 19],
+  ["Light", "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+   "&copy; OpenStreetMap contributors, &copy; CARTO", 20],
+];
 
 function lakePasses(l) {
   if (mapFilters.miles && l.miles != null && l.miles > mapFilters.miles) return false;
@@ -820,200 +840,130 @@ function lakePasses(l) {
   return true;
 }
 
-function zoomMap(factor, cx, cy) {
-  const m = P.map, v = mapExtent();
-  const w = Math.min(m.width, Math.max(m.width / 12, v.w * factor));
-  const h = w * (m.height / m.width);
-  const fx = cx == null ? 0.5 : (cx - v.x) / v.w;
-  const fy = cy == null ? 0.5 : (cy - v.y) / v.h;
-  mapView = {
-    x: Math.min(Math.max(v.x + (v.w - w) * fx, -m.width * 0.2),
-                m.width * 1.2 - w),
-    y: Math.min(Math.max(v.y + (v.h - h) * fy, -m.height * 0.2),
-                m.height * 1.2 - h),
-    w, h,
-  };
+function initMap() {
+  const m = P.map, host = $("#mapbox");
+  if (!m || !host || typeof L === "undefined" || lmap) return;
+  lmap = L.map(host, { scrollWheelZoom: true, zoomControl: true });
+
+  const layers = {};
+  BASEMAPS.forEach(([name, url, attr, maxZoom], i) => {
+    const layer = L.tileLayer(url, { attribution: attr, maxZoom });
+    layers[name] = layer;
+    if (i === 0) layer.addTo(lmap);
+  });
+  L.control.layers(layers, null, { position: "topright" }).addTo(lmap);
+
+  // Drive rings from Dallas, in real metres so they agree with the mileage
+  // column rather than approximating it.
+  ringLayer = L.layerGroup().addTo(lmap);
+  const home = [m.home.lat, m.home.lon];
+  (m.rings || []).forEach(r => {
+    L.circle(home, { radius: r.miles * 1609.34, className: "lr-ring",
+      fill: false, weight: 1, dashArray: "4 6" }).addTo(ringLayer);
+  });
+  if (m.gradient_ring) {
+    L.circle(home, { radius: m.gradient_ring.miles * 1609.34,
+      className: "lr-grad", fill: false, weight: 2, dashArray: "8 5" })
+      .addTo(ringLayer)
+      .bindTooltip(`${m.gradient_ring.miles} mi — catch rates rise past here`,
+        { permanent: false, sticky: true });
+  }
+  L.circleMarker(home, { radius: 6, className: "lr-home", weight: 2 })
+    .addTo(ringLayer).bindTooltip("Dallas", { permanent: false });
+
+  lakeLayer = L.layerGroup().addTo(lmap);
+  lmap.fitBounds(clubBounds(), { padding: [24, 24] });
   drawMap();
 }
 
-function mapPreset(name) {
-  const m = P.map;
-  if (name === "all") { mapView = null; drawMap(); return; }
-  const pick = m.lakes.filter(l => name === "dfw" ? (l.miles ?? 999) <= 70
-    : name === "east" ? l.x > m.width * 0.55
-    : l.y < m.height * 0.34);
-  if (!pick.length) { mapView = null; drawMap(); return; }
-  const xs = pick.map(l => l.x), ys = pick.map(l => l.y);
-  const pad = 60;
-  const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad;
-  const y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
-  const w = Math.max(x1 - x0, (y1 - y0) * (m.width / m.height));
-  mapView = { x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - w * (m.height / m.width) / 2,
-              w, h: w * (m.height / m.width) };
-  drawMap();
+function clubBounds() {
+  const pts = (P.map.lakes || []).filter(l => l.lat != null)
+    .map(l => [l.lat, l.lon]);
+  return pts.length ? L.latLngBounds(pts) : L.latLngBounds([[29, -100], [36, -94]]);
 }
 
 function drawMap() {
-  const m = P.map, host = $("#mapbox");
-  if (!m || !host) return;
-  host.innerHTML = "";
-  const day = dayData();
-  const rates = day.rates || {};
-  const ranked = day.ranked || {};
-  const shown = m.lakes.filter(lakePasses);
+  if (!lmap || !lakeLayer) return;
+  const m = P.map, day = dayData();
+  const rates = day.rates || {}, ranked = day.ranked || {};
+  lakeLayer.clearLayers();
+  markerFor = {};
+
+  const shown = (m.lakes || []).filter(lakePasses);
   const vals = shown.map(l => rates[l.lake]).filter(v => v != null);
   const max = Math.max(...vals, 1);
-  const v = mapExtent();
+  const rFor = t => 5 + Math.min(7, Math.sqrt(Math.max(t || 0, 1)) / 2.6);
 
-  const svg = svgEl("svg", {
-    viewBox: `${v.x} ${v.y} ${v.w} ${v.h}`, class: "mapsvg", role: "img",
-    "aria-label": "Every club lake, coloured by expected catch rate, with "
-      + "drive-distance rings from Dallas",
-  });
-
-  m.states.forEach(st => svg.append(svgEl("path", { d: st.d, class: "mp-state" })));
-
-  // Drive rings. The 80-mile ring is drawn differently because it is where the
-  // club's catch rates actually change, not just a round number.
-  m.rings.forEach(r => {
-    svg.append(svgEl("path", { d: r.d, class: "mp-ring" }));
-    svg.append(svgEl("text", { x: r.label_x + 4, y: r.label_y + 12,
-      class: "mp-ringlab" }, `${r.miles} mi`));
-  });
-  if (m.gradient_ring) {
-    svg.append(svgEl("path", { d: m.gradient_ring.d, class: "mp-grad" }));
-    svg.append(svgEl("text", {
-      x: m.gradient_ring.label_x + 4, y: m.gradient_ring.label_y - 5,
-      class: "mp-gradlab" }, `${m.gradient_ring.miles} mi — rates rise past here`));
-  }
-
-  m.cities.forEach(c => {
-    if (c.home) return;
-    svg.append(svgEl("circle", { cx: c.x, cy: c.y, r: 2, class: "mp-citydot" }));
-    svg.append(svgEl("text", { x: c.x + 5, y: c.y + 3.5, class: "mp-city" }, c.name));
-  });
-
-  // Lakes. Radius carries how much is known about a lake, fill carries how it
-  // fishes; a lake with too little history to rank is drawn hollow rather than
-  // coloured as if it were average.
-  const rFor = t => 3 + Math.min(4.5, Math.sqrt(Math.max(t || 0, 1)) / 3.6);
   shown.forEach(l => {
+    if (l.lat == null) return;
     const fph = rates[l.lake];
     const rank = ranked[l.lake];
-    const dot = svgEl("circle", {
-      cx: l.x, cy: l.y, r: rFor(l.trips),
-      class: "mp-dot" + (fph == null ? " mp-nodata" : "") + (rank ? " mp-top" : "")
-        + (l.unsure ? " mp-unsure" : ""),
-      fill: fph == null ? "none" : rateColor(fph, max),
-      "data-lake": l.lake,
+    // Too little history to rank is drawn hollow, never coloured as average.
+    const mk = L.circleMarker([l.lat, l.lon], {
+      radius: rFor(l.trips), weight: rank ? 2.4 : 1.4,
+      color: fph == null ? "#8c8c7a" : "#ffffff",
+      fillColor: fph == null ? "transparent" : rateColor(fph, max),
+      fillOpacity: fph == null ? 0 : 0.92,
+      dashArray: l.unsure ? "3 3" : null,
     });
-    dot.append(svgEl("title", {}, lakeTip(l, fph, rank)));
-    dot.addEventListener("click", () => selectLake(l.lake));
-    linkHover(dot, l.lake);
-    svg.append(dot);
-    if (selLake === l.lake)
-      svg.append(svgEl("circle", { cx: l.x, cy: l.y, r: rFor(l.trips) + 4.5,
-        class: "mp-sel" }));
-    if (rank && rank <= 5)
-      svg.append(svgEl("text", { x: l.x + rFor(l.trips) + 3, y: l.y + 3.5,
-        class: "mp-lab" }, l.lake));
+    mk._base = { color: mk.options.color, weight: mk.options.weight };
+    mk.bindTooltip(lakeTip(l, fph, rank), { direction: "top", offset: [0, -4] });
+    mk.on("click", () => selectLake(l.lake));
+    mk.on("mouseover", () => setHover(l.lake));
+    mk.on("mouseout", () => setHover(null));
+    mk.addTo(lakeLayer);
+    markerFor[l.lake] = mk;
   });
-
-  svg.append(svgEl("circle", { cx: m.home.x, cy: m.home.y, r: 4.5, class: "mp-home" }));
-  svg.append(svgEl("text", { x: m.home.x + 7, y: m.home.y + 4, class: "mp-city" },
-    "Dallas"));
-
-  svg.addEventListener("wheel", ev => {
-    ev.preventDefault();
-    const pt = svgPoint(svg, ev);
-    zoomMap(ev.deltaY > 0 ? 1.18 : 0.85, pt.x, pt.y);
-  });
-  svg.addEventListener("pointerdown", ev => {
-    mapDrag = { ...svgPoint(svg, ev), view: mapExtent() };
-    svg.setPointerCapture?.(ev.pointerId);
-  });
-  svg.addEventListener("pointermove", ev => {
-    if (!mapDrag) return;
-    const pt = svgPoint(svg, ev);
-    mapView = { ...mapDrag.view,
-      x: mapDrag.view.x - (pt.x - mapDrag.x),
-      y: mapDrag.view.y - (pt.y - mapDrag.y) };
-    svg.setAttribute("viewBox",
-      `${mapView.x} ${mapView.y} ${mapView.w} ${mapView.h}`);
-  });
-  ["pointerup", "pointercancel", "pointerleave"].forEach(e =>
-    svg.addEventListener(e, () => { mapDrag = null; }));
-
-  host.append(svg);
-  drawMapMeta(shown.length, m.lakes.length);
+  highlightOnMap();
+  drawMapMeta(shown.length, (m.lakes || []).length);
 }
 
-function drawMapControls() {
-  const host = $("#mapctl");
-  if (!host) return;
-  host.innerHTML = "";
-  const presets = el("div", "mp-presets");
-  [["all", "Whole club"], ["dfw", "Near DFW"], ["east", "East Texas"],
-   ["north", "Oklahoma"]].forEach(([k, label]) => {
-    const b = el("button", "mp-btn", label);
-    b.type = "button";
-    b.addEventListener("click", () => mapPreset(k));
-    presets.append(b);
-  });
-  const zi = el("button", "mp-btn", "+"); zi.type = "button";
-  zi.setAttribute("aria-label", "Zoom in");
-  zi.addEventListener("click", () => zoomMap(0.72));
-  const zo = el("button", "mp-btn", "\u2212"); zo.type = "button";
-  zo.setAttribute("aria-label", "Zoom out");
-  zo.addEventListener("click", () => zoomMap(1.38));
-  presets.append(zi, zo);
-  host.append(presets);
-
-  // Each control is the query, not a view option: changing one re-asks the
-  // map which lakes are worth considering.
-  [["miles", "Drive at most", 40, 260, 10, mapFilters.miles, v => `${v} mi`],
-   ["trips", "At least", 0, 120, 5, mapFilters.trips, v => `${v} trips`],
-   ["price", "Up to", 0, 320, 10, mapFilters.price,
-    v => (v ? `$${v}/day` : "any price")],
-  ].forEach(([key, label, lo, hi, step, val, fmtv]) => {
-    const row = el("label", "mp-slider");
-    const cap = el("span", "mp-cap", label + " ");
-    const out = el("b", null, fmtv(val));
-    cap.append(out);
-    const input = document.createElement("input");
-    input.type = "range";
-    input.id = "mapf-" + key;
-    input.min = String(lo); input.max = String(hi); input.step = String(step);
-    input.value = String(val);
-    input.addEventListener("input", () => {
-      mapFilters[key] = Number(input.value);
-      out.textContent = fmtv(mapFilters[key]);
-      drawMap();
-    });
-    row.append(cap, input);
-    host.append(row);
+// The map is one of three linked panels, so it answers to the same hover and
+// selection state as the scatter and the table. Leaflet markers are objects
+// rather than DOM nodes, so the class-toggling used for the other two panels
+// cannot reach them - without this, hovering the table lit the scatter and left
+// the map untouched.
+function highlightOnMap() {
+  Object.entries(markerFor).forEach(([name, mk]) => {
+    const base = mk._base || {};
+    if (name === selLake) {
+      mk.setStyle({ color: "#c9a544", weight: 4 });
+      mk.bringToFront();
+    } else if (name === hotLake) {
+      mk.setStyle({ color: "#c9a544", weight: 3 });
+      mk.bringToFront();
+    } else {
+      mk.setStyle({ color: base.color, weight: base.weight });
+    }
   });
 }
 
-function svgPoint(svg, ev) {
-  const box = svg.getBoundingClientRect ? svg.getBoundingClientRect() : null;
-  const v = mapExtent();
-  if (!box || !box.width) return { x: v.x + v.w / 2, y: v.y + v.h / 2 };
-  return {
-    x: v.x + ((ev.clientX - box.left) / box.width) * v.w,
-    y: v.y + ((ev.clientY - box.top) / box.height) * v.h,
-  };
+function focusLakeOnMap(name) {
+  const mk = markerFor[name];
+  if (!lmap || !mk) return;
+  lmap.panTo(mk.getLatLng(), { animate: true });
+}
+
+function mapPreset(name) {
+  if (!lmap) return;
+  if (name === "all") { lmap.fitBounds(clubBounds(), { padding: [24, 24] }); return; }
+  const pick = (P.map.lakes || []).filter(l => l.lat != null && (
+    name === "dfw" ? (l.miles ?? 999) <= 70
+    : name === "east" ? l.lon > -96.2 && l.lat < 33.6
+    : l.lat > 33.9));
+  if (!pick.length) return;
+  lmap.fitBounds(L.latLngBounds(pick.map(l => [l.lat, l.lon])), { padding: [30, 30] });
 }
 
 function lakeTip(l, fph, rank) {
-  const bits = [l.lake];
+  const bits = [`<b>${l.lake}</b>`];
   if (rank) bits.push(`#${rank} this week`);
   bits.push(fph == null ? "too few trips to rank" : `${fmt(fph)} fish/hr`);
   if (l.miles != null) bits.push(`${Math.round(l.miles)} mi`);
   if (l.acres) bits.push(`${l.acres} acres`);
   if (l.trips) bits.push(`${l.trips} trips`);
   if (l.rate) bits.push(`$${Math.round(l.rate)}/day`);
-  return bits.join(" · ");
+  return bits.join(" &middot; ");
 }
 
 function drawMapMeta(shownN, totalN) {
@@ -1022,7 +972,6 @@ function drawMapMeta(shownN, totalN) {
   host.innerHTML = "";
   host.append(el("p", "mm-count", `Showing ${shownN} of ${totalN} lakes`));
 
-  // The map now carries four encodings at once, so it has to say so.
   const key = el("div", "mm-key");
   [["swatch grad", "colour = expected fish/hr"],
    ["swatch size", "size = how many trips back it"],
@@ -1035,6 +984,7 @@ function drawMapMeta(shownN, totalN) {
     key.append(row);
   });
   host.append(key);
+
   const g = P.gradient || {};
   if (g.near && g.far) {
     const box = el("div", "mm-grad");
@@ -1061,6 +1011,46 @@ function drawMapMeta(shownN, totalN) {
          : ""))));
     host.append(box);
   }
+}
+
+function drawMapControls() {
+  const host = $("#mapctl");
+  if (!host || host.dataset.built) return;
+  host.dataset.built = "1";
+  host.innerHTML = "";
+
+  const presets = el("div", "mp-presets");
+  [["all", "Whole club"], ["dfw", "Near DFW"], ["east", "East Texas"],
+   ["north", "Oklahoma"]].forEach(([k, label]) => {
+    const b = el("button", "mp-btn", label);
+    b.type = "button";
+    b.addEventListener("click", () => mapPreset(k));
+    presets.append(b);
+  });
+  host.append(presets);
+
+  // Each control is the query, not a view preference: changing one re-asks the
+  // map which lakes are worth considering.
+  [["miles", "Drive at most", 40, 260, 10, v => `${v} mi`],
+   ["trips", "At least", 0, 120, 5, v => `${v} trips`],
+   ["price", "Up to", 0, 320, 10, v => (v ? `$${v}/day` : "any price")],
+  ].forEach(([key, label, lo, hi, step, fmtv]) => {
+    const row = el("label", "mp-slider");
+    const cap = el("span", "mp-cap", label + " ");
+    const out = el("b", null, fmtv(mapFilters[key]));
+    cap.append(out);
+    const input = document.createElement("input");
+    input.type = "range"; input.id = "mapf-" + key;
+    input.min = String(lo); input.max = String(hi); input.step = String(step);
+    input.value = String(mapFilters[key]);
+    input.addEventListener("input", () => {
+      mapFilters[key] = Number(input.value);
+      out.textContent = fmtv(mapFilters[key]);
+      drawMap();
+    });
+    row.append(cap, input);
+    host.append(row);
+  });
 }
 
 function drawScatter() {
@@ -1131,6 +1121,9 @@ function setHover(name) {
     n.classList.toggle("is-hot", name != null
       && n.getAttribute("data-lake") === name);
   });
+  // The map is not made of DOM nodes carrying data-lake, so it is restyled
+  // directly rather than by selector.
+  try { highlightOnMap(); } catch (e) { /* map not up yet */ }
 }
 
 function linkHover(node, name) {
@@ -1478,7 +1471,8 @@ function drawBrief() {
 
 function selectLake(name) {
   selLake = name;
-  drawMap(); drawScatter(); drawShortlist(); drawBrief();
+  highlightOnMap(); focusLakeOnMap(name);
+  drawScatter(); drawShortlist(); drawBrief();
   const el_ = $("#brief");
   if (el_) el_.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
@@ -2009,6 +2003,9 @@ if (P.days) {
   const firstDay = dayData().shortlist || [];
   selLake = firstDay.length ? firstDay[0].lake : null;
   drawPlanner();
+  // Leaflet is a CDN script, so the map is built defensively: if it is blocked
+  // or slow, every other panel has already rendered.
+  try { initMap(); } catch (e) { console.warn("map unavailable", e); }
 }
 
 route();

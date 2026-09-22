@@ -77,6 +77,7 @@ def build_map(lakes: list[dict]) -> dict:
         x, y = project(city["lon"], city["lat"])
         if -20 <= x <= WIDTH + 20 and -20 <= y <= HEIGHT + 20:
             cities.append({"name": city["name"], "x": x, "y": y,
+                           "lat": city["lat"], "lon": city["lon"],
                            "home": bool(city.get("home"))})
 
     hx, hy = project(HOME["lon"], HOME["lat"])
@@ -100,6 +101,9 @@ def build_map(lakes: list[dict]) -> dict:
             continue
         x, y = project(lk["lon"], lk["lat"])
         marks.append({
+            # Leaflet needs real coordinates; x/y stay for the trade-off plot
+            # and for anything that still wants the flat projection.
+            "lat": round(lk["lat"], 5), "lon": round(lk["lon"], 5),
             "lake": lk["name"], "x": x, "y": y,
             "rank": lk.get("rank"),
             "fph": lk.get("expected_fph"),
@@ -113,5 +117,6 @@ def build_map(lakes: list[dict]) -> dict:
     return {"width": WIDTH, "height": HEIGHT, "states": states,
             "cities": cities, "rings": rings,
             "gradient_ring": gradient_ring,
-            "home": {"x": hx, "y": hy, "name": HOME["name"]},
+            "home": {"x": hx, "y": hy, "lat": HOME["lat"], "lon": HOME["lon"],
+                     "name": HOME["name"]},
             "lakes": marks, "bounds": bounds}
