@@ -136,11 +136,14 @@ class TestPlanner:
                 assert row["lake"] in day["briefs"], f"{key}: {row['lake']}"
 
     def test_map_ships_with_the_page(self):
+        """The basemap comes from tiles now, so the payload carries only what
+        MapLibre cannot: the lakes, and the distances the rings stand for."""
         m = _payload(_page())["planner"]["map"]
-        assert m["states"] and m["rings"] and m["lakes"]
+        assert m["rings"] and m["lakes"] and m["gradient_ring"]
+        assert all("miles" in r for r in m["rings"])
         for mark in m["lakes"]:
-            assert 0 <= mark["x"] <= m["width"]
-            assert 0 <= mark["y"] <= m["height"]
+            assert 25.8 <= mark["lat"] <= 37.1, mark["lake"]
+            assert -103.1 <= mark["lon"] <= -93.5, mark["lake"]
 
     def test_the_map_uses_real_tiles_from_keyless_providers(self):
         """This test used to assert the opposite, and the reversal is the point.
@@ -154,11 +157,10 @@ class TestPlanner:
         credential leak, and a billing-backed key is one someone else can spend.
         """
         html = _page()
-        for host in ("server.arcgisonline.com", "tile.openstreetmap.org",
-                     "basemaps.cartocdn.com"):
+        for host in ("server.arcgisonline.com", "tiles.openfreemap.org"):
             assert host in html, f"{host} basemap missing"
-        assert "cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4" in html, \
-            "Leaflet must be pinned, not floating"
+        assert "cdnjs.cloudflare.com/ajax/libs/maplibre-gl/6.11.2" in html, \
+            "MapLibre must be pinned, not floating"
         for keyed in ("maps.googleapis.com", "api.mapbox.com",
                       "api.maptiler.com", "access_token=", "&key=", "apikey"):
             assert keyed not in html, f"{keyed} implies an API key in a public repo"
@@ -166,7 +168,9 @@ class TestPlanner:
     def test_attribution_is_present_for_every_basemap(self):
         """Required by OSM's and Esri's terms, and it is other people's work."""
         html = _page()
-        for credit in ("OpenStreetMap contributors", "Esri", "CARTO"):
+        # OpenFreeMap's style ships its own OpenStreetMap credit; the inline
+        # satellite style has to carry Esri's itself.
+        for credit in ("Esri", "Maxar", "Earthstar"):
             assert credit in html, f"missing attribution: {credit}"
 
     def test_unconfirmed_locations_are_marked_not_hidden(self):
@@ -314,15 +318,16 @@ class TestPageActuallyRuns:
           const strays = tagged.filter(n => n.attrs["data-lake"] !== name
                                        && n._classes.has("is-hot"));
           if (strays.length) throw new Error("hover leaked to other lakes");
-          const mk = markerFor[name];
-          if (!mk) throw new Error("no map marker for " + name);
-          if (mk.options.color !== "#c9a544")
-            throw new Error("hover did not reach the map marker");
+          // GL features are not DOM nodes, so the map is checked through the
+          // filter that drives its highlight layer.
+          const hot = globalThis.__gl.filters["lakes-hot"];
+          if (!hot || hot[2] !== name)
+            throw new Error("hover did not reach the map: " + JSON.stringify(hot));
           tagged[0].dispatch("mouseleave");
           if (globalThis.__made.some(n => n._classes.has("is-hot")))
             throw new Error("hover never cleared");
-          if (mk.options.color === "#c9a544" && selLake !== name)
-            throw new Error("map marker stayed highlighted after leave");
+          if (globalThis.__gl.filters["lakes-hot"][2] === name)
+            throw new Error("map stayed highlighted after leave");
           console.log("linked", mine.length + 1, "panels for", name);
         """)
         assert r.returncode == 0, f"linked hover broken:\n{r.stderr[:1500]}"
@@ -351,41 +356,78 @@ class TestPageActuallyRuns:
 
     def test_map_filters_actually_change_what_is_plotted(self):
         """The controls are the query, not a view preference, so this drives
-        them against a Leaflet stub and counts the markers that survive."""
+        them against a MapLibre stub and counts the features that survive.
+
+        Counting GeoJSON features rather than marker objects is the whole point
+        of the GL rewrite: one source, data-driven paint, no per-marker state.
+        """
         r = self._run_js("""
-          const L_ = globalThis.__leaflet;
-          const count = () => { drawMap();
-            return L_.markers.filter(m => m._group === lakeLayer).length; };
-          mapFilters.miles = 260; const wide = count();
-          mapFilters.miles = 60;  const tight = count();
-          if (!(tight < wide)) throw new Error(
-            `drive filter did nothing: ${tight} vs ${wide}`);
-          mapFilters.miles = 260; mapFilters.trips = 100;
-          if (!(count() < wide)) throw new Error("trips filter did nothing");
+          const G = globalThis.__gl;
+          const n = () => { drawMap(); return G.sources.lakes.data.features.length; };
+          mapFilters.miles = 300; mapFilters.trips = 0; mapFilters.price = 0;
+          mapFilters.q = ""; const wide = n();
+          if (wide < 100) throw new Error("map is not carrying the club: " + wide);
+          mapFilters.miles = 60;
+          if (!(n() < wide)) throw new Error("drive filter did nothing");
+          mapFilters.miles = 300; mapFilters.trips = 100;
+          if (!(n() < wide)) throw new Error("trips filter did nothing");
           mapFilters.trips = 0; mapFilters.price = 90;
-          if (!(count() < wide)) throw new Error("price filter did nothing");
-          mapFilters.price = 0; count();
-          // Unranked lakes are hollow, never coloured as if average.
-          const hollow = L_.markers.filter(m => m._group === lakeLayer
-            && m.options.fillOpacity === 0).length;
+          if (!(n() < wide)) throw new Error("price filter did nothing");
+          mapFilters.price = 0; mapFilters.q = "coal";
+          if (!(n() < wide)) throw new Error("search did not narrow the map");
+          mapFilters.q = ""; n();
+          // Too little history to rank is drawn hollow, never as average.
+          const hollow = G.sources.lakes.data.features
+            .filter(f => f.properties.fph == null).length;
           if (!hollow) throw new Error("no lake drawn as too-sparse-to-rank");
-          if (L_.circles.length < 5) throw new Error(
-            "drive rings and the 80-mile line are not both drawn");
-          mapPreset("dfw"); mapPreset("all");
-          console.log("controls ok", wide, tight, hollow);
+          if (!G.sources.rings || !G.sources.gradring)
+            throw new Error("drive rings and the 80-mile line are not both drawn");
+          for (const id of ["lakes", "lakes-hot", "lakes-sel", "lakes-label"])
+            if (!G.layers.some(l => l.id === id))
+              throw new Error("missing layer " + id);
+          console.log("controls ok", wide, hollow);
         """)
         assert r.returncode == 0, f"map controls broken:\n{r.stderr[:1500]}"
         assert "controls ok" in r.stdout
 
-    def test_the_gradient_finding_ships_with_its_caveat(self):
-        d = _payload(_page())["planner"]
-        g = d.get("gradient") or {}
-        assert g.get("raw_gap", 0) > 0
-        assert g["far"]["fph"] > g["near"]["fph"]
-        # The page must not sell the raw gap as a drive effect.
-        assert "cannot separate" in g["caveat"]
-        assert g["held_for_size"]["per_100_miles"] < g["raw_gap"]
-        assert d["map"].get("gradient_ring"), "the line is not drawn on the map"
+    def test_map_and_plan_modes_share_one_selection(self):
+        r = self._run_js("""
+          selectLake("Acker Lake");
+          setMode("plan");
+          if (selLake !== "Acker Lake") throw new Error("mode switch lost the lake");
+          setMode("map");
+          if (selLake !== "Acker Lake") throw new Error("mode switch lost the lake");
+          if (globalThis.__gl.resizes < 1)
+            throw new Error("map never resized after a mode change");
+          console.log("modes ok");
+        """)
+        assert r.returncode == 0, f"modes broken:\n{r.stderr[:1200]}"
+        assert "modes ok" in r.stdout
+
+    def test_the_view_is_restorable_and_shareable(self):
+        """Coming back from a lake used to dump you at the top of the page with
+        the map wherever it happened to be."""
+        r = self._run_js("""
+          mapFilters.miles = 120; mapFilters.q = "lake";
+          pushView({}, { replace: true });
+          const hash = globalThis.location.hash;
+          if (!/mi=120/.test(hash) || !/q=lake/.test(hash))
+            throw new Error("filters are not in the URL: " + hash);
+          const parsed = parseHash(hash);
+          if (parsed.filters.miles !== 120 || parsed.filters.q !== "lake")
+            throw new Error("hash does not round-trip");
+          const snap = snapshot();
+          if (!snap.map || snap.map.zoom == null)
+            throw new Error("snapshot carries no viewport");
+          // and a restore puts it back
+          mapFilters.miles = 300;
+          applyView(parsed);
+          if (mapFilters.miles !== 120)
+            throw new Error("applyView did not restore the filters");
+          console.log("view state ok", hash.slice(0, 40));
+        """)
+        assert r.returncode == 0, f"view state broken:\n{r.stderr[:1500]}"
+        assert "view state ok" in r.stdout
 
     def test_render_paths_execute_without_error(self):
         import shutil

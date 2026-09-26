@@ -112,11 +112,17 @@ def build_map(lakes: list[dict]) -> dict:
             "acres": lk.get("acres"),
             "rate": lk.get("day_rate"),
             "unsure": bool(lk.get("geo_uncertain")) or None,
+            "surveyed": bool(lk.get("surveyed")) or None,
         })
 
-    return {"width": WIDTH, "height": HEIGHT, "states": states,
-            "cities": cities, "rings": rings,
-            "gradient_ring": gradient_ring,
+    # State outlines, city dots and the projected ring paths existed because
+    # the map used to draw its own geometry. MapLibre supplies all of that, and
+    # only the ring *distances* are still needed, so the paths are dropped
+    # rather than shipped unread - about 8 KB against a 2 MB page ceiling.
+    rings = [{"miles": r["miles"]} for r in rings]
+    return {"width": WIDTH, "height": HEIGHT,
+            "rings": rings,
+            "gradient_ring": {"miles": gradient_ring["miles"]},
             "home": {"x": hx, "y": hy, "lat": HOME["lat"], "lon": HOME["lon"],
                      "name": HOME["name"]},
             "lakes": marks, "bounds": bounds}

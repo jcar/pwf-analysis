@@ -39,8 +39,8 @@ def build_dashboard(conn: sqlite3.Connection, out: str) -> Path:
 PAGE = r"""<title>Private Water Pattern Book</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/6.11.2/maplibre-gl.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/6.11.2/maplibre-gl.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Sans+3:wght@400;500;600&display=swap">
 <style>
 :root{
@@ -128,8 +128,80 @@ header.top > *{position:relative}
 /* The map leads: it gets the width, and the controls that query it sit beside
    it rather than under the fold. */
 .maphero{display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:26px;
-  align-items:start; margin:0 0 30px}
+  align-items:start; margin:0 0 30px; position:relative}
 @media (max-width:980px){ .maphero{grid-template-columns:1fr} }
+
+/* Map mode gives the map the window; Plan mode is the planner as it was. The
+   two share one selection, so switching never loses your lake. */
+.appbar{position:sticky; top:0; z-index:30; display:flex; gap:14px;
+  align-items:center; flex-wrap:wrap; padding:10px 0 12px;
+  background:var(--ground); border-bottom:1px solid var(--rule)}
+.modes,.basemaps{display:flex; gap:4px}
+.modebtn,.bmbtn{font:600 13px "Source Sans 3",sans-serif; color:var(--ink-3);
+  background:var(--surface-2); border:1px solid var(--rule); border-radius:3px;
+  padding:6px 14px; cursor:pointer}
+.modebtn[aria-pressed="true"],.bmbtn[aria-pressed="true"]{
+  color:var(--ground); background:var(--ink); border-color:var(--ink)}
+.searchwrap{position:relative; flex:1 1 260px; min-width:200px; max-width:460px}
+#lakesearch{width:100%; box-sizing:border-box; font:400 14px "Source Sans 3",sans-serif;
+  color:var(--ink); background:var(--surface); border:1px solid var(--rule-strong);
+  border-radius:3px; padding:8px 12px}
+#lakesearch:focus{outline:2px solid var(--accent); outline-offset:1px}
+.searchresults{position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:40;
+  background:var(--surface); border:1px solid var(--rule-strong);
+  box-shadow:0 8px 24px rgba(0,0,0,.18); max-height:340px; overflow:auto}
+.sr-row{display:block; width:100%; text-align:left; border:0; cursor:pointer;
+  background:none; padding:8px 12px; border-bottom:1px solid var(--rule)}
+.sr-row b{display:block; font:600 13.5px "Source Sans 3",sans-serif; color:var(--ink)}
+.sr-sub{font:500 12px "IBM Plex Mono",monospace; color:var(--ink-3)}
+.sr-row:hover,.sr-row:focus{background:var(--surface-2); outline:none}
+
+body.mode-map .maphero{grid-template-columns:minmax(0,1fr) 360px}
+body.mode-map .mapbox{height:calc(100dvh - 190px); min-height:460px}
+body.mode-map #short, body.mode-map #brief, body.mode-map #wx,
+body.mode-map .note{display:none}
+body.mode-plan .mapbox{height:420px}
+body.mode-plan .lakecard{display:none}
+
+/* Hover gives you the one line; clicking gives you enough to decide without
+   leaving the map. */
+.previewcard{position:absolute; z-index:20; pointer-events:none;
+  background:var(--surface); border:1px solid var(--rule-strong);
+  padding:6px 10px; max-width:260px; box-shadow:0 4px 14px rgba(0,0,0,.2)}
+.previewcard b{display:block; font:600 13px "Source Sans 3",sans-serif}
+.pc-sub{font:500 11.5px "IBM Plex Mono",monospace; color:var(--ink-3)}
+.lakecard{position:absolute; left:16px; bottom:16px; z-index:25; width:330px;
+  max-width:calc(100% - 32px); background:var(--surface);
+  border:1px solid var(--rule-strong); padding:14px 16px;
+  box-shadow:0 10px 30px rgba(0,0,0,.22); max-height:calc(100% - 32px);
+  overflow:auto}
+.lc-head{display:flex; align-items:flex-start; gap:8px}
+.lc-head h3{margin:0; font-size:17px; flex:1}
+.lc-close{border:0; background:none; cursor:pointer; font-size:20px;
+  line-height:1; color:var(--ink-3)}
+.lc-chips{display:flex; flex-wrap:wrap; gap:4px; width:100%; order:3}
+.chip{font:600 10.5px "Source Sans 3",sans-serif; text-transform:uppercase;
+  letter-spacing:.04em; color:var(--ink-3); background:var(--surface-2);
+  border:1px solid var(--rule); border-radius:2px; padding:2px 6px}
+.chip.hot{color:var(--ground); background:var(--accent); border-color:var(--accent)}
+.chip.warn{color:var(--accent); border-color:var(--accent)}
+.lc-stats{display:grid; grid-template-columns:repeat(5,1fr); gap:6px;
+  margin:10px 0 8px}
+.lc-stat{display:flex; flex-direction:column}
+.lc-stat b{font:600 15px "IBM Plex Mono",monospace; color:var(--ink)}
+.lc-stat span{font:500 10px "Source Sans 3",sans-serif; color:var(--ink-3);
+  text-transform:uppercase; letter-spacing:.03em}
+.lc-stat i{font:500 10px "IBM Plex Mono",monospace; color:var(--ink-3);
+  font-style:normal}
+.lc-line{margin:.25rem 0; font:500 12.5px "Source Sans 3",sans-serif;
+  color:var(--ink-2)}
+.lc-say{margin:.5rem 0 0; font-size:12.5px; color:var(--ink-3); font-style:italic}
+.lc-acts{display:flex; gap:6px; margin-top:12px}
+.lc-go,.lc-alt{font:600 12.5px "Source Sans 3",sans-serif; cursor:pointer;
+  border-radius:3px; padding:7px 12px; border:1px solid var(--ink)}
+.lc-go{color:var(--ground); background:var(--ink)}
+.lc-alt{color:var(--ink-2); background:var(--surface-2); border-color:var(--rule)}
+.maplibregl-ctrl-attrib{font-size:10px}
 .mapctl{border:1px solid var(--rule); background:var(--surface); padding:14px 16px}
 .mp-presets{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px}
 .mp-btn{font:600 12px "Source Sans 3",sans-serif; color:var(--ink-2);
@@ -162,8 +234,8 @@ header.top > *{position:relative}
 @media (max-width:980px){ .plan-grid{grid-template-columns:1fr} }
 
 .maprail{display:grid; gap:18px}
-.mapbox{border:1px solid var(--rule); background:var(--surface);
-  height:min(78vh,760px); min-height:420px; z-index:0}
+.mapbox{border:1px solid var(--rule); background:var(--surface-2);
+  height:min(78vh,760px); min-height:420px; z-index:0; position:relative}
 .leaflet-container{background:var(--surface-2); font-family:"Source Sans 3",sans-serif}
 .leaflet-container a{color:var(--accent)}
 /* Drive rings and the eighty-mile line, which is not a round distance but
@@ -518,13 +590,32 @@ footer p{margin:0 0 11px}
 
 <div id="index">
 
+<div class="appbar" id="appbar">
+  <div class="modes">
+    <button type="button" class="modebtn" data-mode="map" aria-pressed="true">Map</button>
+    <button type="button" class="modebtn" data-mode="plan" aria-pressed="false">Plan</button>
+  </div>
+  <div class="searchwrap">
+    <input id="lakesearch" type="search" autocomplete="off" spellcheck="false"
+           placeholder="Search lakes, towns, regions…" aria-label="Search lakes">
+    <div class="searchresults" id="searchresults" hidden></div>
+  </div>
+  <div class="basemaps" id="basemaps">
+    <button type="button" class="bmbtn" data-base="sat" aria-pressed="true">Satellite</button>
+    <button type="button" class="bmbtn" data-base="street" aria-pressed="false">Street</button>
+  </div>
+</div>
+
 <section id="planner">
   <div class="daybar" id="daybar"></div>
   <p class="wx" id="wx"></p>
   <p class="note" id="plan-note"></p>
 
   <div class="maphero">
-    <div class="mapbox" id="mapbox"></div>
+    <div class="mapbox" id="mapbox">
+      <div class="previewcard" id="previewcard" hidden></div>
+    </div>
+    <div class="lakecard" id="lakecard" hidden></div>
     <aside class="maprail">
       <div class="mapctl" id="mapctl"></div>
       <div class="mapmeta" id="mapmeta"></div>
@@ -532,7 +623,6 @@ footer p{margin:0 0 11px}
     </aside>
   </div>
 
-  <p class="note" id="plan-note"></p>
   <div style="overflow-x:auto"><table class="short" id="short"></table></div>
   <div class="brief" id="brief"></div>
 </section>
@@ -640,6 +730,7 @@ footer p{margin:0 0 11px}
 <script>
 const D = __DATA__;
 const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
 const el = (t, c, x) => { const n = document.createElement(t); if (c) n.className = c;
   if (x !== undefined) n.textContent = x; return n; };
 const baitName = b => D.bait_labels[b] || b;
@@ -811,159 +902,254 @@ function rateColor(v, max) {
 }
 
 // ---- the map -------------------------------------------------------------
-// A real slippy map on OpenStreetMap, Esri imagery and Carto tiles. The earlier
-// version drew its own geometry because the artifact host blocks tile servers
-// outright; served from GitHub Pages there is no such limit, and for ten-to-
-// fifty-acre private ponds the satellite layer is the one that actually tells
-// you something - shape, timber, the grass line, where the creek comes in.
+// The primary surface, on MapLibre GL over the club's own surveyed waypoints.
+// Satellite leads because these are ten-to-fifty-acre private ponds: the
+// imagery shows the shape, the timber, the grass line and where the creek comes
+// in, none of which a street map can tell you before you book.
 //
-// It leads the page because where the good water is turns out to be a spatial
-// fact: inside eighty miles of Dallas the lakes are small, hard-fished and
-// average 3.7 fish an hour; beyond it they are bigger, quieter and average 4.9.
-let lmap = null, lakeLayer = null, ringLayer = null, markerFor = {};
-let mapFilters = { miles: 200, trips: 0, price: 0 };
+// It carries the whole club rather than this week's shortlist because where the
+// good water is turns out to be a spatial fact: inside eighty miles of Dallas
+// the lakes are small, hard-fished and average 3.7 fish an hour; beyond it they
+// are bigger, quieter and average 4.8.
+let lmap = null, markerFor = {}, glReady = false;
+let mapFilters = { miles: 260, trips: 0, price: 0, q: "" };
+let basemap = "sat";
 
-const BASEMAPS = [
-  ["Satellite", "https://server.arcgisonline.com/ArcGIS/rest/services/"
-    + "World_Imagery/MapServer/tile/{z}/{y}/{x}",
-   "Imagery &copy; Esri, Maxar, Earthstar Geographics", 19],
-  ["Street", "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-   "&copy; OpenStreetMap contributors", 19],
-  ["Light", "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-   "&copy; OpenStreetMap contributors, &copy; CARTO", 20],
-];
+const ESRI_IMAGERY = "https://server.arcgisonline.com/ArcGIS/rest/services/"
+  + "World_Imagery/MapServer/tile/{z}/{y}/{x}";
+const ESRI_LABELS = "https://server.arcgisonline.com/ArcGIS/rest/services/"
+  + "Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
+const OFM_LIBERTY = "https://tiles.openfreemap.org/styles/liberty";
+
+// Satellite is an inline style so first paint never waits on a style-JSON
+// fetch from a third party.
+function satStyle() {
+  return {
+    version: 8,
+    sources: {
+      sat: { type: "raster", tiles: [ESRI_IMAGERY], tileSize: 256, maxzoom: 19,
+             attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics" },
+      satlab: { type: "raster", tiles: [ESRI_LABELS], tileSize: 256, maxzoom: 19,
+                attribution: "&copy; Esri" },
+    },
+    layers: [{ id: "sat", type: "raster", source: "sat" },
+             { id: "satlab", type: "raster", source: "satlab" }],
+  };
+}
 
 function lakePasses(l) {
   if (mapFilters.miles && l.miles != null && l.miles > mapFilters.miles) return false;
   if (mapFilters.trips && (l.trips || 0) < mapFilters.trips) return false;
   if (mapFilters.price && l.rate != null && l.rate > mapFilters.price) return false;
+  if (mapFilters.q && !matchesQuery(l, mapFilters.q)) return false;
   return true;
+}
+
+// Paint cannot read CSS custom properties, so the depth ramp is resolved once
+// from the stylesheet and re-read when the theme flips.
+function rampColors() {
+  const fallback = ["#dce7f0", "#a9c6dd", "#5f92bd", "#1f5c96"];
+  try {
+    const cs = getComputedStyle(document.documentElement);
+    const got = ["--u1", "--u2", "--u3", "--u4"]
+      .map(v => (cs.getPropertyValue(v) || "").trim());
+    return got.every(Boolean) ? got : fallback;
+  } catch (e) { return fallback; }
+}
+
+function ringFeature(miles, steps) {
+  const m = P.map, lat0 = m.home.lat * Math.PI / 180,
+        lon0 = m.home.lon * Math.PI / 180, ang = miles / 3958.8, pts = [];
+  // Real distance rings, not circles on a projection: Mercator's scale factor
+  // varies with latitude, so a plain circle is up to 8% out east and west and
+  // would disagree with the drive column.
+  for (let i = 0; i <= steps; i++) {
+    const b = 2 * Math.PI * i / steps;
+    const lat = Math.asin(Math.sin(lat0) * Math.cos(ang)
+      + Math.cos(lat0) * Math.sin(ang) * Math.cos(b));
+    const lon = lon0 + Math.atan2(Math.sin(b) * Math.sin(ang) * Math.cos(lat0),
+      Math.cos(ang) - Math.sin(lat0) * Math.sin(lat));
+    pts.push([lon * 180 / Math.PI, lat * 180 / Math.PI]);
+  }
+  return { type: "Feature", properties: { miles },
+           geometry: { type: "LineString", coordinates: pts } };
+}
+
+function toFC(lakes) {
+  const day = dayData(), rates = day.rates || {}, ranked = day.ranked || {};
+  return { type: "FeatureCollection", features: lakes
+    .filter(l => l.lat != null)
+    .map(l => ({ type: "Feature",
+      properties: { lake: l.lake, fph: rates[l.lake] ?? null,
+                    rank: ranked[l.lake] ?? null, trips: l.trips || 0,
+                    miles: l.miles, acres: l.acres, rate: l.rate,
+                    unsure: l.unsure ? 1 : 0,
+                    surveyed: l.surveyed ? 1 : 0 },
+      geometry: { type: "Point", coordinates: [l.lon, l.lat] } })) };
+}
+
+function applyAppLayers() {
+  // setStyle wipes every custom source and layer, so this has to be idempotent
+  // and re-run after each basemap switch.
+  if (!lmap || lmap.getSource("lakes")) return;
+  const m = P.map, ramp = rampColors();
+
+  const rings = (m.rings || []).map(r => ringFeature(r.miles, 128));
+  lmap.addSource("rings", { type: "geojson",
+    data: { type: "FeatureCollection", features: rings } });
+  lmap.addLayer({ id: "rings", type: "line", source: "rings",
+    paint: { "line-color": "#f4f2e9", "line-opacity": 0.42,
+             "line-width": 1, "line-dasharray": [3, 4] } });
+  if (m.gradient_ring) {
+    lmap.addSource("gradring", { type: "geojson",
+      data: { type: "FeatureCollection",
+              features: [ringFeature(m.gradient_ring.miles, 128)] } });
+    lmap.addLayer({ id: "gradring", type: "line", source: "gradring",
+      paint: { "line-color": "#c9a544", "line-opacity": 0.9,
+               "line-width": 2, "line-dasharray": [5, 3] } });
+  }
+
+  lmap.addSource("lakes", { type: "geojson", data: toFC([]) });
+  lmap.addLayer({ id: "lakes", type: "circle", source: "lakes",
+    layout: { "circle-sort-key": ["coalesce", ["get", "fph"], 0] },
+    paint: {
+      "circle-radius": ["*",
+        ["interpolate", ["linear"], ["zoom"], 5, 0.75, 9, 1.35, 13, 2.4],
+        ["+", 4, ["min", 6, ["/", ["sqrt", ["max", ["get", "trips"], 1]], 2.6]]]],
+      // A lake with too little history to rank is drawn hollow, never coloured
+      // as if it were average.
+      "circle-color": ["case", ["==", ["get", "fph"], null], "rgba(0,0,0,0)",
+        ["interpolate", ["linear"], ["get", "fph"],
+         2, ramp[0], 4, ramp[1], 6, ramp[2], 9, ramp[3]]],
+      "circle-opacity": 0.92,
+      // GL circles have no dash array, so an unconfirmed position is carried by
+      // the stroke colour instead of a dashed outline.
+      "circle-stroke-color": ["case", ["==", ["get", "unsure"], 1], "#c9a544",
+        ["==", ["get", "fph"], null], "#9aa691", "#ffffff"],
+      "circle-stroke-width": ["case", ["==", ["get", "rank"], null], 1.2, 2.2],
+    } });
+  lmap.addLayer({ id: "lakes-hot", type: "circle", source: "lakes",
+    filter: ["==", ["get", "lake"], ""],
+    paint: { "circle-radius": 13, "circle-color": "rgba(0,0,0,0)",
+             "circle-stroke-color": "#c9a544", "circle-stroke-width": 2.5 } });
+  lmap.addLayer({ id: "lakes-sel", type: "circle", source: "lakes",
+    filter: ["==", ["get", "lake"], ""],
+    paint: { "circle-radius": 17, "circle-color": "rgba(0,0,0,0)",
+             "circle-stroke-color": "#c9a544", "circle-stroke-width": 3.5 } });
+  lmap.addLayer({ id: "lakes-label", type: "symbol", source: "lakes",
+    minzoom: 8.5,
+    layout: { "text-field": ["get", "lake"], "text-size": 12,
+              "text-offset": [0, 1.4], "text-anchor": "top",
+              "text-font": ["Noto Sans Regular"] },
+    paint: { "text-color": "#ffffff", "text-halo-color": "#161c12",
+             "text-halo-width": 1.4 } });
+
+  ["lakes"].forEach(id => {
+    lmap.on("mousemove", id, e => {
+      const f = e.features && e.features[0];
+      if (f) { setHover(f.properties.lake); showHoverCard(f.properties, e.point); }
+      const c = lmap.getCanvas(); if (c) c.style.cursor = "pointer";
+    });
+    lmap.on("mouseleave", id, () => {
+      setHover(null); hideHoverCard();
+      const c = lmap.getCanvas(); if (c) c.style.cursor = "";
+    });
+    lmap.on("click", id, e => {
+      const f = e.features && e.features[0];
+      if (f) selectLake(f.properties.lake);
+    });
+  });
+  glReady = true;
+  drawMap();
 }
 
 function initMap() {
   const m = P.map, host = $("#mapbox");
-  if (!m || !host || typeof L === "undefined" || lmap) return;
-  lmap = L.map(host, { scrollWheelZoom: true, zoomControl: true });
-
-  const layers = {};
-  BASEMAPS.forEach(([name, url, attr, maxZoom], i) => {
-    const layer = L.tileLayer(url, { attribution: attr, maxZoom });
-    layers[name] = layer;
-    if (i === 0) layer.addTo(lmap);
+  if (!m || !host || typeof maplibregl === "undefined" || lmap) return;
+  lmap = new maplibregl.Map({
+    container: "mapbox",
+    style: basemap === "sat" ? satStyle() : OFM_LIBERTY,
+    center: [m.home.lon, m.home.lat], zoom: 6.4,
+    attributionControl: { compact: true },
   });
-  L.control.layers(layers, null, { position: "topright" }).addTo(lmap);
+  lmap.addControl(new maplibregl.NavigationControl({ visualizePitch: false }),
+                  "top-right");
+  lmap.addControl(new maplibregl.ScaleControl({ unit: "imperial" }),
+                  "bottom-left");
+  lmap.on("load", applyAppLayers);
+  lmap.on("styledata", () => { if (!lmap.getSource("lakes")) applyAppLayers(); });
+  lmap.on("moveend", () => pushView({}, { replace: true }));
+  drawMapControls();
+}
 
-  // Drive rings from Dallas, in real metres so they agree with the mileage
-  // column rather than approximating it.
-  ringLayer = L.layerGroup().addTo(lmap);
-  const home = [m.home.lat, m.home.lon];
-  (m.rings || []).forEach(r => {
-    L.circle(home, { radius: r.miles * 1609.34, className: "lr-ring",
-      fill: false, weight: 1, dashArray: "4 6" }).addTo(ringLayer);
-  });
-  if (m.gradient_ring) {
-    L.circle(home, { radius: m.gradient_ring.miles * 1609.34,
-      className: "lr-grad", fill: false, weight: 2, dashArray: "8 5" })
-      .addTo(ringLayer)
-      .bindTooltip(`${m.gradient_ring.miles} mi — catch rates rise past here`,
-        { permanent: false, sticky: true });
-  }
-  L.circleMarker(home, { radius: 6, className: "lr-home", weight: 2 })
-    .addTo(ringLayer).bindTooltip("Dallas", { permanent: false });
-
-  lakeLayer = L.layerGroup().addTo(lmap);
-  lmap.fitBounds(clubBounds(), { padding: [24, 24] });
-  drawMap();
+function setBasemap(kind) {
+  if (!lmap || kind === basemap) return;
+  basemap = kind;
+  glReady = false;
+  lmap.setStyle(kind === "sat" ? satStyle() : OFM_LIBERTY);
+  lmap.once("styledata", () => { applyAppLayers(); });
+  pushView({}, { replace: true });
 }
 
 function clubBounds() {
-  const pts = (P.map.lakes || []).filter(l => l.lat != null)
-    .map(l => [l.lat, l.lon]);
-  return pts.length ? L.latLngBounds(pts) : L.latLngBounds([[29, -100], [36, -94]]);
+  const pts = (P.map.lakes || []).filter(l => l.lat != null);
+  if (!pts.length) return [[-100, 29], [-94, 36]];
+  const lons = pts.map(p => p.lon), lats = pts.map(p => p.lat);
+  return [[Math.min(...lons), Math.min(...lats)],
+          [Math.max(...lons), Math.max(...lats)]];
 }
 
 function drawMap() {
-  if (!lmap || !lakeLayer) return;
-  const m = P.map, day = dayData();
-  const rates = day.rates || {}, ranked = day.ranked || {};
-  lakeLayer.clearLayers();
-  markerFor = {};
-
+  if (!lmap || !glReady) return;
+  const m = P.map;
   const shown = (m.lakes || []).filter(lakePasses);
-  const vals = shown.map(l => rates[l.lake]).filter(v => v != null);
-  const max = Math.max(...vals, 1);
-  const rFor = t => 5 + Math.min(7, Math.sqrt(Math.max(t || 0, 1)) / 2.6);
-
-  shown.forEach(l => {
-    if (l.lat == null) return;
-    const fph = rates[l.lake];
-    const rank = ranked[l.lake];
-    // Too little history to rank is drawn hollow, never coloured as average.
-    const mk = L.circleMarker([l.lat, l.lon], {
-      radius: rFor(l.trips), weight: rank ? 2.4 : 1.4,
-      color: fph == null ? "#8c8c7a" : "#ffffff",
-      fillColor: fph == null ? "transparent" : rateColor(fph, max),
-      fillOpacity: fph == null ? 0 : 0.92,
-      dashArray: l.unsure ? "3 3" : null,
-    });
-    mk._base = { color: mk.options.color, weight: mk.options.weight };
-    mk.bindTooltip(lakeTip(l, fph, rank), { direction: "top", offset: [0, -4] });
-    mk.on("click", () => selectLake(l.lake));
-    mk.on("mouseover", () => setHover(l.lake));
-    mk.on("mouseout", () => setHover(null));
-    mk.addTo(lakeLayer);
-    markerFor[l.lake] = mk;
-  });
+  markerFor = {};
+  shown.forEach(l => { markerFor[l.lake] = l; });
+  const src = lmap.getSource("lakes");
+  if (src) src.setData(toFC(shown));
   highlightOnMap();
   drawMapMeta(shown.length, (m.lakes || []).length);
 }
 
 // The map is one of three linked panels, so it answers to the same hover and
-// selection state as the scatter and the table. Leaflet markers are objects
-// rather than DOM nodes, so the class-toggling used for the other two panels
-// cannot reach them - without this, hovering the table lit the scatter and left
-// the map untouched.
+// selection state as the scatter and the table. GL features are not DOM nodes,
+// so the class toggling used for the other two cannot reach them - this is the
+// seam that keeps the contract, and setHover/linkHover stay untouched.
 function highlightOnMap() {
-  Object.entries(markerFor).forEach(([name, mk]) => {
-    const base = mk._base || {};
-    if (name === selLake) {
-      mk.setStyle({ color: "#c9a544", weight: 4 });
-      mk.bringToFront();
-    } else if (name === hotLake) {
-      mk.setStyle({ color: "#c9a544", weight: 3 });
-      mk.bringToFront();
-    } else {
-      mk.setStyle({ color: base.color, weight: base.weight });
-    }
-  });
+  if (!lmap || !glReady) return;
+  lmap.setFilter("lakes-hot", ["==", ["get", "lake"], hotLake || ""]);
+  lmap.setFilter("lakes-sel", ["==", ["get", "lake"], selLake || ""]);
 }
 
 function focusLakeOnMap(name) {
-  const mk = markerFor[name];
-  if (!lmap || !mk) return;
-  lmap.panTo(mk.getLatLng(), { animate: true });
+  const l = markerFor[name];
+  if (!lmap || !l || l.lat == null) return;
+  lmap.easeTo({ center: [l.lon, l.lat],
+                zoom: Math.max(lmap.getZoom(), 10.5), duration: 700 });
 }
 
 function mapPreset(name) {
   if (!lmap) return;
-  if (name === "all") { lmap.fitBounds(clubBounds(), { padding: [24, 24] }); return; }
+  if (name === "all") { lmap.fitBounds(clubBounds(), { padding: 40 }); return; }
   const pick = (P.map.lakes || []).filter(l => l.lat != null && (
     name === "dfw" ? (l.miles ?? 999) <= 70
     : name === "east" ? l.lon > -96.2 && l.lat < 33.6
     : l.lat > 33.9));
   if (!pick.length) return;
-  lmap.fitBounds(L.latLngBounds(pick.map(l => [l.lat, l.lon])), { padding: [30, 30] });
+  const lons = pick.map(p => p.lon), lats = pick.map(p => p.lat);
+  lmap.fitBounds([[Math.min(...lons), Math.min(...lats)],
+                  [Math.max(...lons), Math.max(...lats)]], { padding: 60 });
 }
 
 function lakeTip(l, fph, rank) {
-  const bits = [`<b>${l.lake}</b>`];
+  const bits = [l.lake];
   if (rank) bits.push(`#${rank} this week`);
   bits.push(fph == null ? "too few trips to rank" : `${fmt(fph)} fish/hr`);
   if (l.miles != null) bits.push(`${Math.round(l.miles)} mi`);
   if (l.acres) bits.push(`${l.acres} acres`);
   if (l.trips) bits.push(`${l.trips} trips`);
   if (l.rate) bits.push(`$${Math.round(l.rate)}/day`);
-  return bits.join(" &middot; ");
+  return bits.join(" · ");
 }
 
 function drawMapMeta(shownN, totalN) {
@@ -977,7 +1163,7 @@ function drawMapMeta(shownN, totalN) {
    ["swatch size", "size = how many trips back it"],
    ["swatch hollow", "hollow = too few trips to rank"],
    ["swatch ring", "rings = drive distance from Dallas"],
-   ["swatch dash", "dashed outline = location unconfirmed"],
+   ["swatch dash mp-unsure", "gold outline = location unconfirmed"],
   ].forEach(([cls, label]) => {
     const row = el("div", "mm-keyrow");
     row.append(el("i", cls), el("span", null, label));
@@ -1013,6 +1199,316 @@ function drawMapMeta(shownN, totalN) {
   }
 }
 
+// ---- modes, search and the preview card ----------------------------------
+let appMode = "map";
+
+function setMode(mode, quiet) {
+  appMode = mode === "plan" ? "plan" : "map";
+  document.body.classList.toggle("mode-plan", appMode === "plan");
+  document.body.classList.toggle("mode-map", appMode === "map");
+  $$(".modebtn").forEach(b => b.setAttribute(
+    "aria-pressed", String(b.dataset.mode === appMode)));
+  if (appMode === "map" && lmap) requestAnimationFrame(() => lmap.resize());
+  if (!quiet) pushView({});
+}
+
+function matchesQuery(l, q) {
+  return (SEARCH[l.lake] || l.lake.toLowerCase()).includes(q.toLowerCase());
+}
+
+// Name, town, region and cohort, joined from what is already in the payload -
+// the index costs nothing to ship.
+let SEARCH = {};
+function buildSearch() {
+  SEARCH = {};
+  (P.map.lakes || []).forEach(l => {
+    const f = ((D.profiles || {})[l.lake] || {}).facts || {};
+    SEARCH[l.lake] = [l.lake, f.town, f.region, f.cohort]
+      .filter(Boolean).join(" ").toLowerCase();
+  });
+}
+
+function drawSearch() {
+  const box = $("#lakesearch"), list = $("#searchresults");
+  if (!box || !list) return;
+  const q = (box.value || "").trim().toLowerCase();
+  list.innerHTML = "";
+  if (!q) { list.hidden = true; return; }
+  const day = dayData(), rates = day.rates || {};
+  const hits = (P.map.lakes || [])
+    .filter(l => (SEARCH[l.lake] || "").includes(q))
+    .sort((a, b) => {
+      const ap = a.lake.toLowerCase().startsWith(q) ? 0 : 1;
+      const bp = b.lake.toLowerCase().startsWith(q) ? 0 : 1;
+      return ap - bp || (rates[b.lake] || 0) - (rates[a.lake] || 0);
+    }).slice(0, 8);
+  hits.forEach(l => {
+    const f = ((D.profiles || {})[l.lake] || {}).facts || {};
+    const row = el("button", "sr-row");
+    row.type = "button";
+    row.dataset.lake = l.lake;
+    row.append(el("b", null, l.lake));
+    const sub = [f.town, l.miles != null ? `${Math.round(l.miles)} mi` : null,
+                 rates[l.lake] != null ? `${fmt(rates[l.lake])} fish/hr` : null]
+      .filter(Boolean).join(" · ");
+    row.append(el("span", "sr-sub", sub));
+    row.addEventListener("click", () => {
+      box.value = ""; list.hidden = true;
+      mapFilters.q = ""; drawMap();
+      selectLake(l.lake); focusLakeOnMap(l.lake);
+    });
+    linkHover(row, l.lake);
+    list.append(row);
+  });
+  list.hidden = !hits.length;
+}
+
+function wireSearch() {
+  const box = $("#lakesearch");
+  if (!box || box.dataset.wired) return;
+  box.dataset.wired = "1";
+  let t = null;
+  box.addEventListener("input", () => {
+    clearTimeout(t);
+    t = setTimeout(() => {
+      // The query is part of the same predicate as the sliders, so the map,
+      // the rail and the scatter finally narrow together.
+      mapFilters.q = (box.value || "").trim();
+      drawSearch(); drawMap(); drawShortlist(); drawScatter();
+      pushView({}, { replace: true });
+    }, 120);
+  });
+  box.addEventListener("keydown", ev => {
+    const rows = $$("#searchresults .sr-row");
+    if (ev.key === "Escape") { box.value = ""; mapFilters.q = "";
+      drawSearch(); drawMap(); return; }
+    if (ev.key === "Enter" && rows[0]) { rows[0].click(); ev.preventDefault(); }
+    if (ev.key === "ArrowDown" && rows[0]) { rows[0].focus(); ev.preventDefault(); }
+  });
+}
+
+// ---- the card you get before committing to a full profile ------------------
+function showHoverCard(props, point) {
+  const host = $("#previewcard");
+  if (!host || !point) return;
+  host.innerHTML = "";
+  host.append(el("b", null, props.lake));
+  const bits = [];
+  if (props.rank) bits.push(`#${props.rank} this week`);
+  bits.push(props.fph == null ? "too few trips to rank"
+                              : `${fmt(props.fph)} fish/hr`);
+  if (props.miles != null) bits.push(`${Math.round(props.miles)} mi`);
+  host.append(el("span", "pc-sub", bits.join(" · ")));
+  host.hidden = false;
+  host.style.left = Math.round(point.x + 14) + "px";
+  host.style.top = Math.round(point.y + 14) + "px";
+}
+
+function hideHoverCard() {
+  const host = $("#previewcard");
+  if (host) host.hidden = true;
+}
+
+function drawLakeCard() {
+  const host = $("#lakecard");
+  if (!host) return;
+  host.innerHTML = "";
+  const name = selLake;
+  const l = markerFor[name] || (P.map.lakes || []).find(x => x.lake === name);
+  if (!name || !l) { host.hidden = true; return; }
+  host.hidden = false;
+  const day = dayData(), rates = day.rates || {}, ranked = day.ranked || {};
+  const prof = (D.profiles || {})[name] || {};
+  const fph = rates[name];
+
+  const head = el("div", "lc-head");
+  head.append(el("h3", null, name));
+  const chips = el("div", "lc-chips");
+  if (ranked[name]) chips.append(el("span", "chip hot", `#${ranked[name]} this week`));
+  if (l.unsure) chips.append(el("span", "chip warn", "≈ location unconfirmed"));
+  else if (l.surveyed) chips.append(el("span", "chip", "surveyed waypoint"));
+  head.append(chips);
+  const x = el("button", "lc-close", "×");
+  x.type = "button"; x.setAttribute("aria-label", "Close");
+  x.addEventListener("click", () => { selLake = null; drawLakeCard(); highlightOnMap(); });
+  head.append(x);
+  host.append(head);
+
+  const stats = el("div", "lc-stats");
+  [[fph == null ? "–" : fmt(fph), "fish/hr",
+    day.club_month_mean ? `club ${fmt(day.club_month_mean)}` : null],
+   [l.miles == null ? "–" : Math.round(l.miles), "miles", null],
+   [l.rate ? "$" + Math.round(l.rate) : "–", "per day", null],
+   [l.acres || "–", "acres", null],
+   [l.trips || 0, "trips", null],
+  ].forEach(([v, lab, note]) => {
+    const c = el("div", "lc-stat");
+    c.append(el("b", null, String(v)), el("span", null, lab));
+    if (note) c.append(el("i", null, note));
+    stats.append(c);
+  });
+  host.append(stats);
+
+  // The single best answer to "is the extra drive worth it", and it is already
+  // computed for every lake.
+  const cons = prof.consistency || {};
+  if (cons.band) {
+    host.append(el("p", "lc-line",
+      `${cons.band}${cons.typical_fish != null
+        ? ` · typical day ${cons.typical_fish} fish` : ""}`
+      + `${cons.bust_rate != null ? ` · ${Math.round(cons.bust_rate)}% bust` : ""}`));
+  }
+  const plan = ((day.briefs || {})[name] || {}).plan;
+  const baits = (plan && plan.length ? plan.map(b => b.label || b.value || b.name)
+    : ((prof.baits || {}).overall || []).slice(0, 3).map(b => b.label || b.value))
+    .filter(Boolean).slice(0, 3);
+  if (baits.length) host.append(el("p", "lc-line", "Throw: " + baits.join(", ")));
+  const para = ((prof.summary || {}).paragraphs || [])[0];
+  if (para) host.append(el("p", "lc-say", para.length > 190
+    ? para.slice(0, 188).replace(/\s+\S*$/, "") + "…" : para));
+
+  const acts = el("div", "lc-acts");
+  if ((D.profiles || {})[name]) {
+    const b = el("button", "lc-go", "Open full profile →");
+    b.type = "button";
+    b.addEventListener("click", () => openLake(name));
+    acts.append(b);
+  }
+  const z = el("button", "lc-alt", "Zoom here");
+  z.type = "button";
+  z.addEventListener("click", () => focusLakeOnMap(name));
+  acts.append(z);
+  host.append(acts);
+}
+
+function syncFilterInputs() {
+  [["miles", v => `${v} mi`], ["trips", v => `${v} trips`],
+   ["price", v => (v ? `$${v}/day` : "any price")]].forEach(([k, f]) => {
+    const input = $("#mapf-" + k);
+    if (input) { input.value = String(mapFilters[k]); }
+    const out = $("#mapfv-" + k);
+    if (out) out.textContent = f(mapFilters[k]);
+  });
+  const box = $("#lakesearch");
+  if (box && mapFilters.q !== undefined && box.value !== mapFilters.q)
+    box.value = mapFilters.q;
+}
+
+// ---- view state ----------------------------------------------------------
+// Coming back from a lake used to dump you at the top of the page with the map
+// wherever it happened to be. Every history entry now carries a snapshot of the
+// view, and `moveend` keeps the *current* entry up to date - so by the time you
+// open a lake, the entry you are leaving already holds exactly where you were,
+// and Back restores it.
+let lastApplied = null, viewReady = false;
+
+function snapshot() {
+  const v = { mode: appMode, lake: selLake,
+              filters: { ...mapFilters }, basemap,
+              scroll: (document.scrollingElement || {}).scrollTop || 0 };
+  if (lmap) {
+    const c = lmap.getCenter();
+    v.map = { lng: +c.lng.toFixed(5), lat: +c.lat.toFixed(5),
+              zoom: +lmap.getZoom().toFixed(2) };
+  }
+  return v;
+}
+
+function encodeHash(v) {
+  const q = new URLSearchParams();
+  if (v.map) q.set("c", `${v.map.lat},${v.map.lng},${v.map.zoom}`);
+  if (v.basemap && v.basemap !== "sat") q.set("b", v.basemap);
+  if (v.filters) {
+    if (v.filters.miles !== 260) q.set("mi", v.filters.miles);
+    if (v.filters.trips) q.set("tr", v.filters.trips);
+    if (v.filters.price) q.set("pr", v.filters.price);
+    if (v.filters.q) q.set("q", v.filters.q);
+  }
+  const tail = q.toString();
+  const base = v.route && v.route.name === "lake"
+    ? `#/lake/${encodeURIComponent(v.route.lake)}`
+    : v.mode === "plan" ? "#/plan" : "#/map";
+  return tail ? `${base}?${tail}` : base;
+}
+
+function parseHash(h) {
+  const m = /^#\/(map|plan|archive|lake\/(.+?))(?:\?(.*))?$/.exec(h || "");
+  if (!m) return null;
+  const q = new URLSearchParams(m[3] || "");
+  const out = { route: m[2] ? { name: "lake", lake: decodeURIComponent(m[2]) }
+                            : { name: m[1] } };
+  if (q.get("c")) {
+    const [lat, lng, zoom] = q.get("c").split(",").map(Number);
+    if (isFinite(lat) && isFinite(lng)) out.map = { lat, lng, zoom: zoom || 8 };
+  }
+  out.basemap = q.get("b") || "sat";
+  out.filters = {
+    miles: Number(q.get("mi") ?? 260), trips: Number(q.get("tr") ?? 0),
+    price: Number(q.get("pr") ?? 0), q: q.get("q") || "",
+  };
+  return out;
+}
+
+function pushView(partial, opt) {
+  if (!viewReady) return;
+  const v = { ...snapshot(), ...(partial || {}) };
+  if (!v.route) v.route = appMode === "plan" ? { name: "plan" } : { name: "map" };
+  const hash = encodeHash(v);
+  try {
+    if (opt && opt.replace) history.replaceState(v, "", hash);
+    else history.pushState(v, "", hash);
+    sessionStorage.setItem("pwf.view", JSON.stringify(v));
+  } catch (e) { location.hash = hash; }
+}
+
+function applyView(v) {
+  if (!v) return;
+  if (v.filters) {
+    mapFilters = { ...mapFilters, ...v.filters };
+    syncFilterInputs();
+  }
+  if (v.basemap && v.basemap !== basemap) setBasemap(v.basemap);
+  if (v.map && lmap) lmap.jumpTo({ center: [v.map.lng, v.map.lat],
+                                   zoom: v.map.zoom });
+  const r = v.route || { name: v.mode === "plan" ? "plan" : "map" };
+  if (r.name === "lake") { renderProfile(r.lake); document.body.classList.add("profile-open"); }
+  else { document.body.classList.remove("profile-open"); setMode(r.name === "plan" ? "plan" : "map", true); }
+  if (v.lake && v.lake !== selLake) { selLake = v.lake; drawScatter(); drawShortlist(); drawBrief(); }
+  drawMap();
+  if (v.scroll != null && document.scrollingElement)
+    document.scrollingElement.scrollTop = v.scroll;
+}
+
+function openLake(name) {
+  if (!D.profiles || !D.profiles[name]) return;
+  pushView({ route: { name: "lake", lake: name }, lake: name });
+  route();
+}
+
+function closeLake() {
+  if (history.state && history.state.route
+      && history.state.route.name === "lake") { history.back(); return; }
+  pushView({ route: { name: appMode === "plan" ? "plan" : "map" } });
+  route();
+}
+
+function route() {
+  const h = location.hash;
+  if (h === lastApplied) return;
+  lastApplied = h;
+  const v = parseHash(h);
+  if (!v) { document.body.classList.remove("profile-open"); return; }
+  if (v.route.name === "lake") {
+    if (!D.profiles || !D.profiles[v.route.lake]) { document.body.classList.remove("profile-open"); return; }
+    renderProfile(v.route.lake);
+    document.body.classList.add("profile-open");
+    if (lmap) requestAnimationFrame(() => lmap.resize());
+  } else {
+    document.body.classList.remove("profile-open");
+    setMode(v.route.name === "plan" ? "plan" : "map", true);
+  }
+}
+
 function drawMapControls() {
   const host = $("#mapctl");
   if (!host || host.dataset.built) return;
@@ -1038,6 +1534,7 @@ function drawMapControls() {
     const row = el("label", "mp-slider");
     const cap = el("span", "mp-cap", label + " ");
     const out = el("b", null, fmtv(mapFilters[key]));
+    out.id = "mapfv-" + key;
     cap.append(out);
     const input = document.createElement("input");
     input.type = "range"; input.id = "mapf-" + key;
@@ -1046,7 +1543,8 @@ function drawMapControls() {
     input.addEventListener("input", () => {
       mapFilters[key] = Number(input.value);
       out.textContent = fmtv(mapFilters[key]);
-      drawMap();
+      drawMap(); drawShortlist(); drawScatter();
+      pushView({}, { replace: true });
     });
     row.append(cap, input);
     host.append(row);
@@ -1471,10 +1969,14 @@ function drawBrief() {
 
 function selectLake(name) {
   selLake = name;
-  highlightOnMap(); focusLakeOnMap(name);
-  drawScatter(); drawShortlist(); drawBrief();
-  const el_ = $("#brief");
-  if (el_) el_.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  highlightOnMap();
+  drawScatter(); drawShortlist(); drawBrief(); drawLakeCard();
+  if (appMode === "map") { focusLakeOnMap(name); }
+  else {
+    const el_ = $("#brief");
+    if (el_) el_.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  pushView({ lake: name }, { replace: true });
 }
 
 function drawDaybar() {
@@ -1928,21 +2430,12 @@ function renderProfile(name) {
       `this page as a hint rather than a measurement.`));
 }
 
-function openLake(name) {
-  if (!D.profiles[name]) return;
-  location.hash = "lake/" + encodeURIComponent(name);
-}
-function closeLake() { location.hash = ""; }
-function route() {
-  const m = /^#lake\/(.+)$/.exec(location.hash || "");
-  if (m) {
-    renderProfile(decodeURIComponent(m[1]));
-    document.body.classList.add("profile-open");
-    window.scrollTo(0, 0);
-  } else {
-    document.body.classList.remove("profile-open");
-  }
-}
+window.addEventListener("popstate", ev => {
+  lastApplied = null;
+  if (ev.state) applyView(ev.state); else route();
+});
+// Kept only for a hand-edited URL; route() is idempotent so the two cannot
+// double-apply.
 window.addEventListener("hashchange", route);
 
 /* ---- lake table ---- */
@@ -2003,9 +2496,28 @@ if (P.days) {
   const firstDay = dayData().shortlist || [];
   selLake = firstDay.length ? firstDay[0].lake : null;
   drawPlanner();
-  // Leaflet is a CDN script, so the map is built defensively: if it is blocked
-  // or slow, every other panel has already rendered.
+  buildSearch(); wireSearch();
+  $$(".modebtn").forEach(b =>
+    b.addEventListener("click", () => setMode(b.dataset.mode)));
+  $$(".bmbtn").forEach(b => b.addEventListener("click", () => {
+    setBasemap(b.dataset.base);
+    $$(".bmbtn").forEach(o => o.setAttribute("aria-pressed",
+      String(o.dataset.base === b.dataset.base)));
+  }));
+  // MapLibre is a CDN script, so the map is built defensively: if it is blocked
+  // or slow, every other panel has already rendered and the rail still works.
   try { initMap(); } catch (e) { console.warn("map unavailable", e); }
+  try { history.scrollRestoration = "manual"; } catch (e) {}
+  viewReady = true;
+  const fromHash = parseHash(location.hash);
+  let restored = fromHash;
+  if (!restored) {
+    try { restored = JSON.parse(sessionStorage.getItem("pwf.view") || "null"); }
+    catch (e) { restored = null; }
+  }
+  if (restored) applyView(restored);
+  else { setMode("map", true); pushView({}, { replace: true }); }
+  drawLakeCard();
 }
 
 route();

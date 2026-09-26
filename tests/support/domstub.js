@@ -50,7 +50,9 @@ globalThis.document={
   createTextNode:t=>{const n=new N("#text"); n._text=t; return n;},
   getElementById:id=>{const n=new N("div"); n.id=id; made.push(n); return n;},
   querySelector:sel=>{const n=new N("div"); n.id=(sel||"").replace("#",""); made.push(n); return n;},
-  body:{classList:{add(){},remove(){}}},
+  // A real classList: the app toggles mode-map / mode-plan / profile-open on
+  // the body, and a stub with only add/remove let a mode switch throw.
+  body: (() => { const b = new N("body"); return b; })(),
 };
 // Real enough to resolve "[data-lake]", which the linked hover depends on.
 // A stub returning [] made the hover test pass while doing nothing at all -
@@ -60,6 +62,16 @@ globalThis.document.querySelectorAll=(sel)=>{
   return [];
 };
 globalThis.window={addEventListener(){},scrollTo(){}};
+globalThis.requestAnimationFrame=fn=>fn();
+globalThis.setTimeout=globalThis.setTimeout||((fn)=>fn());
+globalThis.getComputedStyle=()=>({getPropertyValue:()=>""});
+globalThis.history={state:null,scrollRestoration:"auto",
+  pushState(s,_t,h){this.state=s; if(h) globalThis.location.hash=h.replace(/^[^#]*/,"");},
+  replaceState(s,_t,h){this.state=s; if(h) globalThis.location.hash=h.replace(/^[^#]*/,"");},
+  back(){}};
+globalThis.sessionStorage={_d:{},getItem(k){return this._d[k]??null;},
+  setItem(k,v){this._d[k]=String(v);},removeItem(k){delete this._d[k];}};
+globalThis.URLSearchParams=globalThis.URLSearchParams||class{};
 globalThis.location={hash:""};
 globalThis.__made=made;
 
@@ -77,43 +89,72 @@ globalThis.document.querySelector = (sel) => {
   return _qs(sel);
 };
 
-// ---- Leaflet, enough of it to exercise the map's real code path -----------
-// Without this, initMap() returns early on `typeof L === "undefined"`, drawMap()
-// does nothing, and the map tests pass while testing nothing at all - the same
-// trap as the planner that was silently parsed as CSS.
-globalThis.__leaflet = { markers: [], circles: [], tileLayers: [], fits: 0, pans: 0 };
-class LayerGroup {
-  constructor(){ this._layers = []; }
-  addTo(){ return this; }
-  clearLayers(){ this._layers.length = 0;
-    globalThis.__leaflet.markers = globalThis.__leaflet.markers
-      .filter(m => m._group !== this); return this; }
-  addLayer(l){ this._layers.push(l); return this; }
+// ---- MapLibre GL, enough of it to exercise the map's real code path -------
+// Without this, initMap() returns early on `typeof maplibregl === "undefined"`,
+// drawMap() does nothing, and the map tests pass while testing nothing at all -
+// the same trap as the planner that was silently parsed as CSS, and as the
+// Leaflet stub that returned [] from querySelectorAll.
+globalThis.__gl = { sources: {}, layers: [], filters: {}, paint: {},
+                    controls: [], eases: 0, fits: 0, resizes: 0, style: null };
+
+class GLSource {
+  constructor(spec){ this.spec = spec; this.data = spec && spec.data; }
+  setData(d){ this.data = d; }
 }
-class Marker {
-  constructor(latlng, opts){ this._latlng = latlng; this.options = opts || {};
-    this._on = {}; }
-  addTo(g){ if (g && g._layers) { g._layers.push(this); this._group = g; }
-    globalThis.__leaflet.markers.push(this); return this; }
-  bindTooltip(t){ this._tip = t; return this; }
-  on(ev, fn){ (this._on[ev] ||= []).push(fn); return this; }
-  fire(ev){ (this._on[ev] || []).forEach(f => f()); }
-  setStyle(o){ Object.assign(this.options, o); return this; }
-  bringToFront(){ return this; }
-  getLatLng(){ return this._latlng; }
+class GLMap {
+  constructor(opts){
+    this.opts = opts || {};
+    globalThis.__gl.style = this.opts.style;
+    this._on = {};
+    this._center = { lng: (opts.center||[0,0])[0], lat: (opts.center||[0,0])[1] };
+    this._zoom = opts.zoom ?? 6;
+  }
+  // The real map fires "load" once its style is ready. Nothing drives a frame
+  // here, so a load handler runs the moment it is registered - otherwise
+  // applyAppLayers never runs and the map tests pass against an empty map.
+  on(ev, a, b){ const fn = b || a; (this._on[ev] ||= []).push(fn);
+    if (ev === "load") fn({});
+    return this; }
+  once(ev, fn){ return this.on(ev, fn); }
+  off(){ return this; }
+  fire(ev, payload){ (this._on[ev]||[]).forEach(f => f(payload || {})); }
+  addControl(c){ globalThis.__gl.controls.push(c); return this; }
+  addSource(id, spec){ globalThis.__gl.sources[id] = new GLSource(spec); }
+  getSource(id){ return globalThis.__gl.sources[id]; }
+  removeSource(id){ delete globalThis.__gl.sources[id]; }
+  addLayer(spec){ globalThis.__gl.layers.push(spec);
+    if (spec.paint) globalThis.__gl.paint[spec.id] = { ...spec.paint }; }
+  getLayer(id){ return globalThis.__gl.layers.find(l => l.id === id); }
+  removeLayer(id){ globalThis.__gl.layers =
+    globalThis.__gl.layers.filter(l => l.id !== id); }
+  setFilter(id, f){ globalThis.__gl.filters[id] = f; }
+  getFilter(id){ return globalThis.__gl.filters[id]; }
+  setPaintProperty(id, k, v){ (globalThis.__gl.paint[id] ||= {})[k] = v; }
+  setLayoutProperty(){}
+  setStyle(s){ globalThis.__gl.style = s; this.fire("styledata"); }
+  easeTo(o){ globalThis.__gl.eases++; if (o && o.center){
+    this._center = { lng: o.center[0], lat: o.center[1] }; }
+    if (o && o.zoom != null) this._zoom = o.zoom; }
+  jumpTo(o){ this.easeTo(o); }
+  flyTo(o){ this.easeTo(o); }
+  fitBounds(){ globalThis.__gl.fits++; }
+  resize(){ globalThis.__gl.resizes++; }
+  getCenter(){ return this._center; }
+  getZoom(){ return this._zoom; }
+  getBearing(){ return 0; }
+  getPitch(){ return 0; }
+  getCanvas(){ return { style: {} }; }
+  getContainer(){ return { style: {} }; }
+  queryRenderedFeatures(){ return []; }
+  remove(){}
 }
-globalThis.L = {
-  map(){ return {
-    fitBounds(){ globalThis.__leaflet.fits++; },
-    panTo(){ globalThis.__leaflet.pans++; },
-    setView(){},
-  }; },
-  tileLayer(url, opts){ globalThis.__leaflet.tileLayers.push({ url, opts });
-    return { addTo(){ return this; } }; },
-  control: { layers(){ return { addTo(){ return this; } }; } },
-  layerGroup(){ const g = new LayerGroup(); return g; },
-  circle(latlng, opts){ const c = new Marker(latlng, opts);
-    globalThis.__leaflet.circles.push(c); return c; },
-  circleMarker(latlng, opts){ return new Marker(latlng, opts); },
-  latLngBounds(pts){ return { pts }; },
+globalThis.maplibregl = {
+  Map: GLMap,
+  NavigationControl: class { constructor(o){ this.kind = "nav"; this.o = o; } },
+  ScaleControl: class { constructor(o){ this.kind = "scale"; this.o = o; } },
+  GeolocateControl: class { constructor(o){ this.kind = "geo"; this.o = o; } },
+  AttributionControl: class { constructor(o){ this.kind = "attr"; this.o = o; } },
+  LngLatBounds: class { constructor(){ this.pts = []; }
+    extend(p){ this.pts.push(p); return this; } },
+  supported: () => true,
 };

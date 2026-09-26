@@ -311,7 +311,7 @@ def _planner(conn, trips, lures) -> dict:
 
     # Every lake with coordinates, so the shortlist is seen in context.
     all_lakes = [dict(r) for r in conn.execute(
-        "SELECT name, lat, lon, geo_uncertain FROM lakes"
+        "SELECT name, lat, lon, geo_uncertain, coord_source FROM lakes"
         " WHERE lat IS NOT NULL AND report_count > 0")]
 
     forecasts = {}
@@ -381,6 +381,7 @@ def _planner(conn, trips, lures) -> dict:
         lk["trips"] = a.get("n_total")
         lk["acres"] = a.get("acres")
         lk["day_rate"] = a.get("day_rate")
+        lk["surveyed"] = lk.get("coord_source") == "waypoint"
 
     # A lake the club's own directions cannot confirm still has sound catch
     # data - it is only the drive and the weather join that rest on a guessed

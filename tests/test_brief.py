@@ -6,6 +6,7 @@ agree with the drive column. A map whose rings contradicted the mileage would be
 worse than no map.
 """
 import math
+import re
 from datetime import date
 
 import pytest
@@ -129,73 +130,58 @@ class TestCitationsAreReal:
 
 
 class TestMapAgreesWithTheDriveColumn:
-    def _map(self, conn):
-        from dashboard.mapview import build_map
-        lakes = [dict(r) for r in conn.execute(
-            "SELECT name, lat, lon FROM lakes"
-            " WHERE lat IS NOT NULL AND report_count > 0")]
-        return build_map(lakes), lakes
+    """The map exists to answer "how far am I driving", so its rings have to
+    agree with the mileage column.
 
-    def test_every_lake_plots_inside_the_viewport(self, live):
-        conn, _t, _l = live
-        m, _ = self._map(conn)
-        for mark in m["lakes"]:
-            assert 0 <= mark["x"] <= m["width"], mark["lake"]
-            assert 0 <= mark["y"] <= m["height"], mark["lake"]
+    That guarantee used to live in a projected SVG path built in Python. The map
+    is MapLibre now and draws the rings in JavaScript from real coordinates, so
+    the test follows it there rather than being deleted with the code it
+    covered.
+    """
 
     def test_every_lake_sits_in_texas_or_oklahoma(self, live):
         conn, _t, _l = live
-        rows = conn.execute(
-            "SELECT name, lat, lon FROM lakes WHERE lat IS NOT NULL").fetchall()
-        for r in rows:
+        for r in conn.execute(
+                "SELECT name, lat, lon FROM lakes WHERE lat IS NOT NULL"):
             assert 25.8 <= r["lat"] <= 37.1, r["name"]
             assert -106.7 <= r["lon"] <= -93.5, r["name"]
 
-    def test_rings_agree_with_the_mileage(self, live):
-        """The map exists to answer 'how far am I driving'. If a lake plots
-        outside the 100-mile ring while the table calls it 90 miles, the map is
-        lying."""
-        conn, _t, _l = live
-        m, lakes = self._map(conn)
-        home = (m["home"]["x"], m["home"]["y"])
-        ring = next(r for r in m["rings"] if r["miles"] == 100)
-        pts = [tuple(map(float, p.split(",")))
-               for p in __import__("re").findall(r"[-\d.]+,[-\d.]+", ring["d"])]
-        coords = {lk["name"]: (lk["lat"], lk["lon"]) for lk in lakes}
-        errs = []
-        for mark in m["lakes"]:
-            lat, lon = coords[mark["lake"]]
-            true_mi = miles_between(32.7767, -96.7970, lat, lon)
-            ang = math.atan2(mark["y"] - home[1], mark["x"] - home[0])
-            nearest = min(pts, key=lambda p: abs(
-                math.atan2(p[1] - home[1], p[0] - home[0]) - ang))
-            r_at = math.dist(nearest, home)
-            est = math.dist((mark["x"], mark["y"]), home) / r_at * 100
-            errs.append(abs(est - true_mi))
-        assert sum(errs) / len(errs) < 3.0, f"mean ring error {sum(errs)/len(errs):.1f} mi"
-        assert max(errs) < 15.0, f"worst ring error {max(errs):.1f} mi"
+    def test_rings_are_true_distances_not_circles(self):
+        """A plain circle on a Mercator projection is up to 8% out east and
+        west. Every vertex has to be the stated distance from Dallas."""
+        import json
+        import shutil
+        import subprocess
+        import tempfile
+        from pathlib import Path
 
-    def test_projection_places_a_known_point(self, live):
-        """Dallas must land where Dallas is, relative to the lakes around it."""
-        conn, _t, _l = live
-        m, lakes = self._map(conn)
-        home = m["home"]
-        near = [mk for mk in m["lakes"] if mk["lake"] == "Malouf Lake"]
-        if not near:
-            pytest.skip("Malouf Lake absent")
-        d = math.dist((near[0]["x"], near[0]["y"]), (home["x"], home["y"]))
-        ring60 = next(r for r in m["rings"] if r["miles"] == 60)
-        pts = [tuple(map(float, p.split(",")))
-               for p in __import__("re").findall(r"[-\d.]+,[-\d.]+", ring60["d"])]
-        r60 = sum(math.dist(p, (home["x"], home["y"])) for p in pts) / len(pts)
-        assert d < r60, "a 13-mile lake must plot inside the 60-mile ring"
+        if not shutil.which("node"):
+            pytest.skip("node not available")
+        page = next((q for q in (Path("docs/index.html"),
+                                 Path("dashboard/index.html")) if q.exists()), None)
+        if page is None:
+            pytest.skip("dashboard not built")
+        stub = Path("tests/support/domstub.js")
+        m = re.search(r"(?s)<script>(.*)</script>", page.read_text(encoding="utf-8"))
+        src = (stub.read_text() + "\n" + m.group(1)
+               + "\nconsole.log(JSON.stringify("
+                 "ringFeature(100, 64).geometry.coordinates));")
+        with tempfile.NamedTemporaryFile("w", suffix=".mjs", delete=False,
+                                         encoding="utf-8") as f:
+            f.write(src)
+            path = f.name
+        try:
+            r = subprocess.run(["node", path], capture_output=True, text=True,
+                               timeout=120)
+            assert r.returncode == 0, r.stderr[:1200]
+            pts = json.loads(r.stdout.strip().splitlines()[-1])
+        finally:
+            Path(path).unlink(missing_ok=True)
 
-    def test_region_geometry_is_committed_and_small(self):
-        region = load()
-        assert len(region["states"]) >= 4
-        n = sum(len(r) for s in region["states"] for r in s["rings"])
-        assert 100 < n < 2000, f"{n} points - check the simplification tolerance"
-        assert list(RINGS_MILES) == region["rings_miles"]
+        assert len(pts) >= 64
+        errs = [abs(miles_between(32.7767, -96.7970, lat, lon) - 100)
+                for lon, lat in pts]
+        assert max(errs) < 1.0, f"worst ring vertex is {max(errs):.2f} mi out"
 
 
 class TestProjection:
