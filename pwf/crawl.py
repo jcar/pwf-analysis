@@ -249,3 +249,28 @@ def crawl_lakes(conn, lake_variants: dict[str, list[str]], refresh: bool = False
     conn.commit()
     progress(len(lake_variants), len(lake_variants), stats, "lakes")
     return stats
+
+
+def crawl_properties(conn, refresh: bool = False,
+                     progress=print) -> dict:
+    """Fetch the club's property map, which carries the surveyed coordinates.
+
+    One page, one request. It is cached through the same path as everything else
+    so the coordinates can be re-parsed offline and the crawl stays the only
+    part of this project that touches the network.
+    """
+    import httpx as _httpx
+
+    url = C.PROPERTIES_URL
+    if not refresh and url in have(conn, "properties"):
+        progress("properties page already cached")
+        return {"ok": 0, "cached": 1}
+
+    with _httpx.Client(headers={"User-Agent": C.USER_AGENT},
+                       timeout=C.TIMEOUT, follow_redirects=True) as client:
+        r = client.get(url)
+    ok = r.status_code == 200 and len(r.text) > 5000
+    _store(conn, url, "properties", "all", r.status_code, r.text, not ok)
+    conn.commit()
+    progress(f"properties page: HTTP {r.status_code}, {len(r.text)} bytes")
+    return {"ok": int(ok), "cached": 0, "status": r.status_code}

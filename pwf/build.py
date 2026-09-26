@@ -107,24 +107,33 @@ def _flush_reports(conn, batch):
 
 
 def build_lakes(conn: sqlite3.Connection) -> int:
-    """Create the lake table from every lake name seen in index or reports."""
+    """Create the lake table from every lake name seen in index or reports.
+
+    Reports are counted by identity, not by sighting. A report is usually named
+    twice - once on the listing card and again in its own property field - and
+    adding both inflated every well-covered lake by up to double: JerMar Lake
+    was published as 606 reports when 221 of those were the same 221 reports
+    counted a second time, against 385 that actually exist.
+    """
     counts: dict[str, dict] = {}
 
-    def bump(name, town=None):
+    def bump(name, report_id, town=None):
         name = _norm_lake(name)
         if not name:
             return
-        e = counts.setdefault(name, {"town": None, "n": 0})
-        e["n"] += 1
+        e = counts.setdefault(name, {"town": None, "ids": set()})
+        e["ids"].add(report_id)
         if town and not e["town"]:
             e["town"] = re.sub(r"\s+", " ", town).strip(" .,-") or None
 
-    for name, town in conn.execute(
-            "SELECT lake_name, lake_town FROM report_index WHERE lake_name IS NOT NULL"):
-        bump(name, town)
-    for (name,) in conn.execute(
-            "SELECT property_name FROM reports WHERE property_name IS NOT NULL"):
-        bump(name)
+    for rid, name, town in conn.execute(
+            "SELECT report_id, lake_name, lake_town FROM report_index"
+            " WHERE lake_name IS NOT NULL"):
+        bump(name, rid, town)
+    for rid, name in conn.execute(
+            "SELECT report_id, property_name FROM reports"
+            " WHERE property_name IS NOT NULL"):
+        bump(name, rid)
 
     # Fold names that differ only by case, keeping the spelling seen most often.
     # "Tara Lake" and "Tara lake" were two rows holding 174 and 40 reports of one
@@ -136,11 +145,12 @@ def build_lakes(conn: sqlite3.Connection) -> int:
         if cur is None:
             folded[key] = {"name": name, **e}
         else:
-            cur["n"] += e["n"]
+            cur["ids"] |= e["ids"]
             cur["town"] = cur["town"] or e["town"]
-            if e["n"] > counts[cur["name"]]["n"]:
+            if len(e["ids"]) > len(counts[cur["name"]]["ids"]):
                 cur["name"] = name
-    counts = {v["name"]: {"town": v["town"], "n": v["n"]} for v in folded.values()}
+    counts = {v["name"]: {"town": v["town"], "n": len(v["ids"])}
+              for v in folded.values()}
 
     for name, e in counts.items():
         conn.execute(
@@ -394,3 +404,103 @@ def merge_alias_rows(conn: sqlite3.Connection) -> list[dict]:
                        "trips_moved": moved, "canonical_trips": total})
     conn.commit()
     return merged
+
+
+MIN_SPLIT_REPORTS = 5
+
+
+def resolve_name_collisions(conn: sqlite3.Connection) -> list[dict]:
+    """Split a lake row that is really two properties sharing a name.
+
+    The club reuses names. Its own property map lists two "Twin Lakes" - one at
+    Ben Wheeler, Texas and one at Cody Ranch in Coalgate, Oklahoma, 154 miles
+    apart and running concurrently - and a "Moonshine Lake" that was at Walnut
+    Springs until 2022 and has been at Coalgate since 2023. Keyed on the name
+    alone, both collapsed into one row: Twin Lakes carried 243 Ben Wheeler trips
+    and 43 Coalgate trips as a single lake, so its catch rate, its drive and its
+    weather were an average of two waters that have nothing to do with each
+    other.
+
+    The listing records a town per report, which is the evidence that separates
+    them. The town matching the row's surveyed waypoint keeps the original name;
+    every other town becomes its own lake, placed from the club property whose
+    own listing names that town.
+    """
+    from .geo_shapes import miles_between
+    from .parse_properties import parse
+    from .crawl import iter_cached
+
+    doc = next((d for _u, _r, d in iter_cached(conn, "properties")), None)
+    props = parse(doc) if doc else []
+
+    groups: dict[str, list] = {}
+    for r in conn.execute(
+            "SELECT lake_name, lake_town, COUNT(*) c FROM report_index"
+            " WHERE lake_name IS NOT NULL AND lake_town IS NOT NULL"
+            "   AND lake_town <> '' GROUP BY lake_name, lake_town"):
+        groups.setdefault(r["lake_name"], []).append(
+            {"town": r["lake_town"], "n": r["c"]})
+
+    done = []
+    for name, towns in groups.items():
+        towns = [t for t in towns if t["n"] >= MIN_SPLIT_REPORTS]
+        if len(towns) < 2:
+            continue
+        row = conn.execute(
+            "SELECT lake_id, name, lat, lon FROM lakes WHERE name=?",
+            (name,)).fetchone()
+        if row is None:
+            continue
+
+        # Which town is the row already standing on? That one keeps the name.
+        def near(town):
+            for p in props:
+                if (p.get("place") or "").lower().startswith(town.lower()) \
+                        and row["lat"] is not None:
+                    return miles_between(row["lat"], row["lon"], p["lat"], p["lon"])
+            return 9e9
+        keep = min(towns, key=lambda t: near(t["town"]))["town"]
+
+        for t in towns:
+            if t["town"] == keep:
+                continue
+            new_name = f"{name} ({t['town']})"
+            prop = next((p for p in props
+                         if (p.get("place") or "").lower()
+                         .startswith(t["town"].lower())), None)
+            cur = conn.execute("SELECT lake_id FROM lakes WHERE name=?",
+                               (new_name,)).fetchone()
+            if cur is None:
+                conn.execute(
+                    "INSERT INTO lakes (name, town, lat, lon, geo_uncertain,"
+                    " coord_source, club_id, report_count) VALUES (?,?,?,?,?,?,?,0)",
+                    (new_name, t["town"],
+                     prop["lat"] if prop else None, prop["lon"] if prop else None,
+                     0 if prop else 1,
+                     "waypoint" if prop else "inferred",
+                     prop["club_id"] if prop else None))
+                new_id = conn.execute("SELECT last_insert_rowid() i").fetchone()["i"]
+            else:
+                new_id = cur["lake_id"]
+            moved = conn.execute(
+                "UPDATE trips SET lake_id=? WHERE lake_id=? AND report_id IN"
+                " (SELECT report_id FROM report_index WHERE lake_name=?"
+                "  AND lake_town=?)",
+                (new_id, row["lake_id"], name, t["town"])).rowcount
+            done.append({"from": name, "to": new_name, "town": t["town"],
+                         "trips_moved": moved,
+                         "placed": bool(prop)})
+    recount(conn)
+    conn.commit()
+    return done
+
+
+def recount(conn: sqlite3.Connection) -> None:
+    """Refresh report_count as distinct reports attributed to each lake."""
+    for row in conn.execute("SELECT lake_id FROM lakes").fetchall():
+        n = conn.execute(
+            "SELECT COUNT(DISTINCT report_id) c FROM trips WHERE lake_id=?",
+            (row["lake_id"],)).fetchone()["c"]
+        conn.execute("UPDATE lakes SET report_count=? WHERE lake_id=?",
+                     (n, row["lake_id"]))
+    conn.commit()

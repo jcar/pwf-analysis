@@ -47,13 +47,17 @@ def _fmt(v, nd=2):
 # pipeline
 # --------------------------------------------------------------------------- #
 @app.command()
-def crawl(index: bool = typer.Option(False, help="Crawl listing pages only"),
+def crawl(properties: bool = typer.Option(False, help="Fetch the club property map only"),
+          index: bool = typer.Option(False, help="Crawl listing pages only"),
           reports: bool = typer.Option(False, help="Crawl report pages only"),
           lakes: bool = typer.Option(False, help="Crawl lake property pages only"),
           limit: int = typer.Option(None, help="Stop after N new pages"),
           refresh: bool = typer.Option(False, help="Re-fetch pages already cached")):
     """Harvest the site. Resumable - re-running picks up where it stopped."""
     conn = _db()
+    if properties:
+        console.print(f"properties: {CR.crawl_properties(conn, progress=console.print)}")
+        return
     do_all = not (index or reports or lakes)
     if index or do_all:
         console.print("[bold]listing index[/bold]")

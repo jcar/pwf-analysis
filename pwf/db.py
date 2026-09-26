@@ -210,7 +210,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
     wanted = {
         "trips": [("trip_date_source", "TEXT")],
         "lakes": [("report_count", "INTEGER"),
-                  ("geo_uncertain", "INTEGER")],
+                  ("geo_uncertain", "INTEGER"),
+                  # How a lake's position was established, weakest to
+                  # strongest: region, sibling, directions, confirmed,
+                  # waypoint. Only "waypoint" is surveyed by the club itself.
+                  ("coord_source", "TEXT"),
+                  ("club_id", "TEXT")],
     }
     for table, cols in wanted.items():
         have = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}

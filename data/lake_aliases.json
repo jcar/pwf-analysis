@@ -8,7 +8,11 @@
     "Two look like aliases and are NOT. The club runs two properties called 'Twin",
     "Lakes' - one at Cody Ranch in Coalgate, Oklahoma, one in Ben Wheeler, Texas -",
     "and 'Moonshine Lake' likewise exists at Cody Ranch and at Walnut Springs.",
-    "Merging either pair would fuse lakes 200 miles apart."
+    "Merging either pair would fuse lakes 200 miles apart.",
+    "",
+    "The club reuses names across properties, so some rows are separated by town",
+    "before aliases are applied (see resolve_name_collisions). The Coalgate pairs",
+    "below are the same water reached under two labels once that split has run."
   ],
   "aliases": {
     "Heartbrand Ranch": "Waelder Heartbrand Ranch",
@@ -17,10 +21,12 @@
     "Cody Ranch Peach Creek and Crabgrass Lakes": "Peach Creek and Crabgrass Lakes",
     "Nix Ranch Lake TCU": "Nix Ranch: Lake TCU",
     "Tara lake": "Tara Lake",
-    "Travis Lake - (Formerly Flying M)": "Travis Lake"
+    "Travis Lake - (Formerly Flying M)": "Travis Lake",
+    "Cody Ranch Twin Lakes": "Twin Lakes (Coalgate)",
+    "Cody Ranch: Moonshine Lake": "Moonshine Lake"
   },
   "distinct": {
-    "Cody Ranch Twin Lakes": "not Twin Lakes (Ben Wheeler) - Cody Ranch is Coalgate, OK",
-    "Cody Ranch: Moonshine Lake": "not Moonshine Lake (Walnut Springs, TX)"
+    "Twin Lakes (Coalgate)": "not Twin Lakes (Ben Wheeler) - 154 miles apart, both current",
+    "Moonshine Lake (Walnut Springs)": "retired; the club's Moonshine Lake has been at Coalgate since 2023"
   }
 }

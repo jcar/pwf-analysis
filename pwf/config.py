@@ -11,6 +11,9 @@ REPORT_URL = BASE + "/forums/view_report/{id}"
 INDEX_URL = BASE + "/forums/reports/all/{offset}"
 INDEX_FIRST = BASE + "/forums/reports"
 LAKE_URL = BASE + "/view-property/{slug}"
+# The club's own property map. It carries surveyed coordinates for every active
+# property - the only place on the site that does - and needs no login.
+PROPERTIES_URL = BASE + "/properties"
 
 # Politeness. robots.txt permits everything; these limits are courtesy to a
 # small club's server, not an obligation. Do not raise them casually.

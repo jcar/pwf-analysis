@@ -368,3 +368,124 @@ def resolve_by_sibling(conn: sqlite3.Connection) -> list[dict]:
                       "moved": None if moved is None else round(moved, 1)})
     conn.commit()
     return fixed
+
+
+def apply_waypoints(conn: sqlite3.Connection) -> dict:
+    """Place every active lake from the club's own surveyed coordinates.
+
+    This outranks everything else, including the hand-confirmed CSV, because it
+    is the club's own survey rather than anybody's inference - mine or a
+    member's. Retired properties are absent from the file and keep whatever the
+    weaker passes worked out, marked as such.
+
+    **Slug first, and a title never overwrites a slug match.** The first version
+    fell back to the title whenever a slug missed, which quietly destroyed the
+    thing it was meant to fix: the club runs two properties called "Twin Lakes",
+    and the Cody Ranch one - whose slug matches no row here - fell through to
+    the title and stamped its Coalgate coordinates onto the Ben Wheeler lake and
+    its 389 trips. A title is claimed only when it is unambiguous among the
+    properties that still need a home.
+    """
+    from .crawl import iter_cached
+    from .geo_shapes import miles_between
+    from .parse_properties import parse
+
+    doc = next((d for _u, _r, d in iter_cached(conn, "properties")), None)
+    if not doc:
+        return {"error": "properties page not cached - run `pwf crawl --properties`"}
+    props = parse(doc)
+    if not props:
+        return {"error": "no properties parsed"}
+
+    rows = conn.execute(
+        "SELECT lake_id, name, slug, lat, lon, report_count FROM lakes").fetchall()
+    by_slug = {r["slug"]: r for r in rows if r["slug"]}
+    by_title: dict[str, list] = {}
+    for r in rows:
+        by_title.setdefault(_norm_title(r["name"]), []).append(r)
+
+    # A lake whose own slug was never resolved may still be named exactly what
+    # the club's slug spells out: "Cody Ranch Twin Lakes" slugifies to
+    # cody_ranch_twin_lakes. That is still a slug match, and unlike a title it
+    # keeps the two Twin Lakes apart.
+    from .build import slugify
+    by_nameslug: dict[str, list] = {}
+    for r in rows:
+        by_nameslug.setdefault(slugify(r["name"]), []).append(r)
+
+    pairs: list[tuple[dict, object]] = []
+    claimed: set[int] = set()
+    leftover: list[dict] = []
+    for p in props:
+        row = by_slug.get(p["slug"]) if p["slug"] else None
+        if row is None and p["slug"]:
+            cands = [r for r in by_nameslug.get(p["slug"], [])
+                     if r["lake_id"] not in claimed]
+            row = cands[0] if len(cands) == 1 else None
+        if row is None:
+            leftover.append(p)
+            continue
+        pairs.append((p, row))
+        claimed.add(row["lake_id"])
+
+    # Title matching only for what the slug could not place, only onto rows no
+    # slug already claimed, and only where the title picks out exactly one lake
+    # and exactly one property.
+    titles_wanted: dict[str, int] = {}
+    for p in leftover:
+        titles_wanted[_norm_title(p["title"])] = \
+            titles_wanted.get(_norm_title(p["title"]), 0) + 1
+    ambiguous, unmatched = [], []
+    for p in leftover:
+        key = _norm_title(p["title"])
+        cands = [r for r in by_title.get(key, []) if r["lake_id"] not in claimed]
+        if titles_wanted[key] > 1 or len(cands) != 1:
+            (ambiguous if cands else unmatched).append(p["title"])
+            continue
+        pairs.append((p, cands[0]))
+        claimed.add(cands[0]["lake_id"])
+
+    moved = []
+    for p, row in pairs:
+        was = None
+        if row["lat"] is not None:
+            was = miles_between(row["lat"], row["lon"], p["lat"], p["lon"])
+        # The town on file was inferred from a listing string and can be stale
+        # once the club moves a name to new water - Moonshine Lake still read
+        # "Walnut Springs" while standing on Coalgate coordinates.
+        town = (p.get("place") or "").split()[0:2]
+        town = " ".join(town).strip() or None
+        conn.execute(
+            "UPDATE lakes SET lat=?, lon=?, geo_uncertain=0,"
+            " coord_source='waypoint', club_id=?,"
+            " town=COALESCE(?, town) WHERE lake_id=?",
+            (p["lat"], p["lon"], p["club_id"], _club_town(p), row["lake_id"]))
+        if was is not None and was > 0.5:
+            moved.append({"lake": row["name"], "miles": round(was, 1),
+                          "reports": row["report_count"] or 0})
+    # Anything the club did not survey keeps its inferred position, labelled.
+    conn.execute("UPDATE lakes SET coord_source='inferred'"
+                 " WHERE lat IS NOT NULL AND coord_source IS NOT 'waypoint'")
+    conn.commit()
+    moved.sort(key=lambda m: -m["miles"])
+    return {"properties": len(props), "matched": len(pairs),
+            "by_slug": sum(1 for p, _ in pairs if p["slug"] in by_slug),
+            "ambiguous": ambiguous, "unmatched": unmatched, "moved": moved}
+
+
+def _club_town(prop: dict) -> str | None:
+    """The town out of a club `place` string like "Coalgate Oklahoma"."""
+    import re as _re
+    place = (prop.get("place") or "").strip()
+    if not place:
+        return None
+    # Strip the trailing region, which is the unreliable half: the club files
+    # Coalgate, Oklahoma under "Dallas / Fort Worth Area".
+    place = _re.split(r"\s+(?:Dallas|Houston|Austin|San Antonio|Oklahoma|East|West)\b",
+                      place)[0]
+    return place.strip() or None
+
+
+def _norm_title(name: str | None) -> str:
+    import re as _re
+    return _re.sub(r"[^a-z0-9]", "", (name or "").lower())
