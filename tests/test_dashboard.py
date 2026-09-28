@@ -159,7 +159,7 @@ class TestPlanner:
         html = _page()
         for host in ("server.arcgisonline.com", "tiles.openfreemap.org"):
             assert host in html, f"{host} basemap missing"
-        assert "cdnjs.cloudflare.com/ajax/libs/maplibre-gl/6.11.2" in html, \
+        assert "cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.9.0" in html, \
             "MapLibre must be pinned, not floating"
         for keyed in ("maps.googleapis.com", "api.mapbox.com",
                       "api.maptiler.com", "access_token=", "&key=", "apikey"):
@@ -239,6 +239,141 @@ class TestPlanner:
         assert "#f4f2e9" in html and "#7a5f1c" in html, "light palette missing"
         assert "#141811" in html and "#d4ae4a" in html, "dark palette missing"
         assert "family=Fraunces" in html
+
+
+class TestExternalAssetsResolve:
+    """Every external URL the page loads must actually exist.
+
+    This is the test that was missing, and its absence cost a broken map. The
+    suite asserted the MapLibre URL was *present in the HTML* and the runtime
+    stub *provided* a fake `maplibregl`, so both passed while the real script
+    tag pointed at a 404: cdnjs publishes maplibre-gl 6.11.2 as CSS only, and
+    the npm package for v6 ships no browser bundle at all, because it is
+    ESM/bundler-only. Nothing that checked a string could have caught that -
+    only fetching the URL can.
+    """
+
+    def _urls(self, html):
+        """Real resources only. A preconnect is a bare origin, not a file."""
+        out = set()
+        for tag in re.findall(r"<(?:script|link)\b[^>]*>", html):
+            if re.search(r'rel="(?:preconnect|dns-prefetch)"', tag):
+                continue
+            m = re.search(r'(?:src|href)="(https://[^"]+)"', tag)
+            if m:
+                out.add(m.group(1))
+        return out
+
+    def test_the_page_loads_nothing_that_404s(self):
+        import urllib.error
+        import urllib.request
+
+        urls = self._urls(_page())
+        assert urls, "no external assets found at all"
+        broken = []
+        for u in sorted(urls):
+            req = urllib.request.Request(u, method="GET",
+                                         headers={"User-Agent": "pwf-analysis"})
+            try:
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    if r.status != 200 or not r.read(2048):
+                        broken.append(f"{u} -> HTTP {r.status}")
+            except urllib.error.URLError as e:
+                if isinstance(getattr(e, "reason", None), OSError):
+                    pytest.skip(f"network unavailable: {e}")
+                broken.append(f"{u} -> {e}")
+        assert not broken, "external assets that do not load:\n  " \
+            + "\n  ".join(broken)
+
+    def test_text_layers_have_glyphs_to_draw_with(self):
+        """An inline raster style carries no glyphs, so a symbol layer's text
+        silently fails to render. Easy to miss: the layer is added without
+        complaint and simply shows nothing."""
+        html = _page()
+        assert "text-field" in html, "no label layer to check"
+        assert "glyphs" in html, \
+            "a symbol layer is declared but the style provides no glyphs"
+
+    def test_the_map_library_actually_defines_its_global(self):
+        """A 200 is not enough: the file has to be a browser bundle that
+        defines `maplibregl`, which the ESM-only v6 build does not."""
+        import urllib.request
+
+        url = next((u for u in self._urls(_page())
+                    if "maplibre-gl" in u and u.endswith(".js")), None)
+        assert url, "no MapLibre script tag"
+        try:
+            with urllib.request.urlopen(
+                    urllib.request.Request(
+                        url, headers={"User-Agent": "pwf-analysis"}),
+                    timeout=60) as r:
+                body = r.read().decode("utf-8", "replace")
+        except OSError as e:
+            pytest.skip(f"network unavailable: {e}")
+        assert len(body) > 200_000, f"{url} is only {len(body)} bytes"
+        assert "maplibregl" in body, "bundle does not export the global"
+
+
+class TestStyleIsValid:
+    """The style the page builds, checked against MapLibre's own validator.
+
+    The DOM/GL stub proves the code runs; it cannot know whether MapLibre would
+    accept what that code produces. It accepted a circle-radius of
+    `["*", ["interpolate", ..., ["zoom"], ...], ...]`, which the real library
+    rejects outright - "zoom" may only feed a top-level step or interpolate -
+    so the lakes layer was never added and the map drew nothing. Only the spec
+    can catch that class of error.
+    """
+
+    SPEC = ("https://cdn.jsdelivr.net/npm/"
+            "@maplibre/maplibre-gl-style-spec@23.3.0/dist/index.cjs")
+
+    def test_every_layer_and_expression_is_accepted(self, tmp_path):
+        import shutil
+        import subprocess
+        import urllib.request
+        from pathlib import Path
+
+        if not shutil.which("node"):
+            pytest.skip("node not available")
+        stub = Path("tests/support/domstub.js")
+        if not stub.exists():
+            pytest.skip("dom stub missing")
+        spec = tmp_path / "spec.cjs"
+        try:
+            with urllib.request.urlopen(
+                    urllib.request.Request(
+                        self.SPEC, headers={"User-Agent": "pwf-analysis"}),
+                    timeout=60) as r:
+                spec.write_bytes(r.read())
+        except OSError as e:
+            pytest.skip(f"style spec unavailable: {e}")
+
+        m = re.search(r"(?s)<script>(.*)</script>", _page())
+        runner = tmp_path / "run.mjs"
+        runner.write_text(
+            'import { createRequire } from "module";\n'
+            f'const require = createRequire("{tmp_path}/x.cjs");\n'
+            f'const spec = require("{spec}");\n'
+            + stub.read_text() + "\n" + m.group(1) + """
+const G = globalThis.__gl;
+const style = JSON.parse(JSON.stringify(G.style));
+style.layers = style.layers.concat(
+  G.layers.map(l => JSON.parse(JSON.stringify(l))));
+for (const [id, s] of Object.entries(G.sources))
+  style.sources[id] = { type: "geojson", data: s.data };
+const errs = spec.validateStyleMin(style);
+if (errs.length) {
+  errs.forEach(e => console.error("  " + (e.message || String(e))));
+  process.exit(1);
+}
+console.log("STYLE VALID", style.layers.length, "layers");
+""", encoding="utf-8")
+        r = subprocess.run(["node", str(runner)], capture_output=True,
+                           text=True, timeout=180)
+        assert r.returncode == 0, \
+            f"MapLibre would reject this style:\n{r.stderr[:1500]}"
+        assert "STYLE VALID" in r.stdout
 
 
 class TestPageActuallyRuns:

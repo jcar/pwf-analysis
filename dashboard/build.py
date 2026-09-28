@@ -39,8 +39,8 @@ def build_dashboard(conn: sqlite3.Connection, out: str) -> Path:
 PAGE = r"""<title>Private Water Pattern Book</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/6.11.2/maplibre-gl.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/6.11.2/maplibre-gl.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.9.0/maplibre-gl.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/5.9.0/maplibre-gl.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Sans+3:wght@400;500;600&display=swap">
 <style>
 :root{
@@ -926,6 +926,10 @@ const OFM_LIBERTY = "https://tiles.openfreemap.org/styles/liberty";
 function satStyle() {
   return {
     version: 8,
+    // A symbol layer needs glyphs, and an inline raster style has none by
+    // default - without this the lake labels silently fail to render. Served
+    // keyless by OpenFreeMap, the same project as the street basemap.
+    glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
     sources: {
       sat: { type: "raster", tiles: [ESRI_IMAGERY], tileSize: 256, maxzoom: 19,
              attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics" },
@@ -988,6 +992,10 @@ function toFC(lakes) {
       geometry: { type: "Point", coordinates: [l.lon, l.lat] } })) };
 }
 
+// Radius carries how much is known about a lake; the zoom curve scales it.
+const SIZE_BY_TRIPS = ["+", 4,
+  ["min", 6, ["/", ["sqrt", ["max", ["get", "trips"], 1]], 2.6]]];
+
 function applyAppLayers() {
   // setStyle wipes every custom source and layer, so this has to be idempotent
   // and re-run after each basemap switch.
@@ -1013,9 +1021,14 @@ function applyAppLayers() {
   lmap.addLayer({ id: "lakes", type: "circle", source: "lakes",
     layout: { "circle-sort-key": ["coalesce", ["get", "fph"], 0] },
     paint: {
-      "circle-radius": ["*",
-        ["interpolate", ["linear"], ["zoom"], 5, 0.75, 9, 1.35, 13, 2.4],
-        ["+", 4, ["min", 6, ["/", ["sqrt", ["max", ["get", "trips"], 1]], 2.6]]]],
+      // "zoom" may only be the input to a top-level step/interpolate, so the
+      // sample-size term goes inside each stop rather than multiplying the
+      // whole thing - nesting it under "*" is rejected and the layer, with
+      // every lake on it, never gets added.
+      "circle-radius": ["interpolate", ["linear"], ["zoom"],
+        5, ["*", 0.75, SIZE_BY_TRIPS],
+        9, ["*", 1.35, SIZE_BY_TRIPS],
+        13, ["*", 2.4, SIZE_BY_TRIPS]],
       // A lake with too little history to rank is drawn hollow, never coloured
       // as if it were average.
       "circle-color": ["case", ["==", ["get", "fph"], null], "rgba(0,0,0,0)",
